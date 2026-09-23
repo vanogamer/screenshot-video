@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📸 Screenshot results</title>
+  <link rel="stylesheet" href="/styles.css?v=18.0.0">
+  <link rel="icon" type="image/x-icon" href="screenshot.png">
+</head>
+<body class="results-night-body theme-ocean">
+  <main class="results-shell">
+  <header class="results-topbar studio-hero">
+    <div class="studio-hero-copy"><div class="studio-eyebrow">Generated frames</div><h1 id="pageTitle" class="results-title">📸 Screenshot results</h1><p class="studio-subtitle">Preview, download ZIP, or clear the generated screenshot session.</p></div>
+    <div class="night-header-controls results-controls">
+      <label class="night-theme-field">
+        <span id="themeColorLabel" class="night-theme-label">Color</span>
+        <select id="themeColor" class="night-select night-theme-select">
+          <option value="ocean">Ocean blue</option>
+          <option value="mint">Mint green</option>
+          <option value="violet">Soft violet</option>
+          <option value="rose">Night rose</option>
+          <option value="amber">Warm amber</option>
+          <option value="graphite">Graphite</option>
+        </select>
+      </label>
+    </div>
+  </header>
+  <p id="message" class="results-message"></p>
+    <div class="results-actions">
+      <button id="downloadZip" class="night-btn night-btn-primary">⬇️ Download ZIP</button>
+      <button id="clearResults" class="night-btn night-btn-ghost">🧹 Clear results</button>
+    </div>
+
+
+  <div id="screenshots"
+       class="results-grid">
+  </div>
+
+  <div class="results-nav">
+    <a id="backLink" href="/" class="night-btn night-btn-primary">⬅️ Back</a>
+    <button id="refreshBtn" onclick="location.reload()" class="night-btn night-btn-warn">🔁 Refresh</button>
+  </div>
+  </main>
+
+    <script>
+    const qs = new URLSearchParams(location.search);
+    const sidFromUrl = qs.get('sessionId') || '';
+    const sidFromStorage = localStorage.getItem('uploadSessionId') || '';
+    const sessionId = sidFromUrl || sidFromStorage;
+
+    const LANG_KEY = 'lang';
+    const THEME_KEY = 'videoScreenshotTheme';
+    const langs = {
+      en: {
+        pageTitle: '📸 Screenshot results',
+        h1: '📸 Screenshot results',
+        themeColorLabel: 'Color',
+        themeOptions: { ocean: 'Ocean blue', mint: 'Mint green', violet: 'Soft violet', rose: 'Night rose', amber: 'Warm amber', graphite: 'Graphite' },
+        downloadZip: '⬇️ Download ZIP',
+        clearResults: '🧹 Clear results',
+        back: '⬅️ Back',
+        refresh: '🔁 Refresh',
+        enlargeHint: 'Tap/click to enlarge',
+        noSession: 'Session ID not found.',
+        cleared: 'Results cleared from this page. Saved photos were kept in the output folder.',
+        noShots: 'No images found.',
+        mobileAuto: '📦 Auto ZIP download is being attempted. If it does not start, tap the ZIP button.',
+        mobileHint: '📱 Phone mode: ZIP download is recommended for large batches.',
+        deleteServerFailed: 'Results cleared from this page. Saved photos were kept in the output folder.',
+        foundShots: (n, name) => name ? `${name} → Found ${n} image(s).` : `Found ${n} image(s).`,
+      },
+      ka: {
+        pageTitle: '📸 სქრინშოტების შედეგები',
+        h1: '📸 სქრინშოტების შედეგები',
+        themeColorLabel: 'ფერი',
+        themeOptions: { ocean: 'ოკეანის ლურჯი', mint: 'მწვანე', violet: 'იისფერი', rose: 'ვარდისფერი', amber: 'თბილი ქარვა', graphite: 'გრაფიტი' },
+        downloadZip: '⬇️ ZIP ჩამოტვირთვა',
+        clearResults: '🧹 შედეგების გასუფთავება',
+        back: '⬅️ უკან',
+        refresh: '🔁 განახლება',
+        enlargeHint: 'გასადიდებლად დააჭირე',
+        noSession: 'Session ID ვერ მოიძებნა.',
+        cleared: 'შედეგები ამ გვერდიდან გასუფთავდა. შენახული ფოტოები output საქაღალდეში დარჩა.',
+        noShots: 'სურათები არ მოიძებნა.',
+        mobileAuto: '📦 ZIP ავტომატური ჩამოტვირთვა მიმდინარეობს. თუ არ დაიწყო, დააჭირე ZIP ღილაკს.',
+        mobileHint: '📱 ტელეფონის რეჟიმი: დიდი პარტიისთვის ZIP ჩამოტვირთვა ჯობია.',
+        deleteServerFailed: 'შედეგები ამ გვერდიდან გასუფთავდა. შენახული ფოტოები output საქაღალდეში დარჩა.',
+        foundShots: (n, name) => name ? `${name} → ნაპოვნია ${n} სურათი.` : `ნაპოვნია ${n} სურათი.`,
+      }
+    };
+    const normalizeLang = (v) => (String(v || '').toLowerCase() === 'ka' ? 'ka' : 'en');
+    const currentLang = normalizeLang(localStorage.getItem(LANG_KEY) || 'en');
+    let t = langs[currentLang];
+    document.documentElement.lang = currentLang;
+
+    const isPhoneLike = () => {
+      if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+        if (navigator.userAgentData.mobile) return true;
+      }
+      const ua = /Android|iPhone|iPad|iPod|Mobi|Mobile/i.test(navigator.userAgent || '');
+      const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      const smallish = window.matchMedia && window.matchMedia('(max-width: 1024px)').matches;
+      return ua || (coarse && smallish);
+    };
+
+    const isLowPowerUI = () => {
+      const reducedData = window.matchMedia && window.matchMedia('(prefers-reduced-data: reduce)').matches;
+      const lowMemory = Number(navigator.deviceMemory || 8) <= 4;
+      const lowCpu = Number(navigator.hardwareConcurrency || 8) <= 4;
+      return isPhoneLike() || reducedData || lowMemory || lowCpu;
+    };
+
+    const pageTitleEl = document.getElementById('pageTitle');
+    const themeColorSelect = document.getElementById('themeColor');
+    const themeColorLabel = document.getElementById('themeColorLabel');
+    const backLinkEl = document.getElementById('backLink');
+    const refreshBtnEl = document.getElementById('refreshBtn');
+    const messageEl = document.getElementById('message');
+    const container = document.getElementById('screenshots');
+    const downloadBtn = document.getElementById('downloadZip');
+    const clearBtn = document.getElementById('clearResults');
+
+    const THEME_NAMES = ['ocean', 'mint', 'violet', 'rose', 'amber', 'graphite'];
+
+    function normalizeTheme(value) {
+      value = String(value || '').toLowerCase();
+      return THEME_NAMES.includes(value) ? value : 'ocean';
+    }
+
+    function setTheme(value, { save = true } = {}) {
+      const theme = normalizeTheme(value);
+      document.body.classList.remove(...THEME_NAMES.map(name => `theme-${name}`));
+      document.body.classList.add(`theme-${theme}`);
+      document.documentElement.dataset.theme = theme;
+      if (themeColorSelect) themeColorSelect.value = theme;
+      if (save) localStorage.setItem(THEME_KEY, theme);
+    }
+
+    function safeSrc(src) {
+      return String(src || '').replace(/["'<>]/g, '');
+    }
+
+    function applyStaticTexts() {
+      document.title = t.pageTitle;
+      if (pageTitleEl) pageTitleEl.textContent = t.h1;
+      if (themeColorLabel) themeColorLabel.textContent = t.themeColorLabel;
+      if (themeColorSelect && t.themeOptions) {
+        for (const opt of Array.from(themeColorSelect.options)) {
+          if (t.themeOptions[opt.value]) opt.textContent = t.themeOptions[opt.value];
+        }
+      }
+      if (downloadBtn) downloadBtn.textContent = t.downloadZip;
+      if (clearBtn) clearBtn.textContent = t.clearResults;
+      if (backLinkEl) backLinkEl.textContent = t.back;
+      if (refreshBtnEl) refreshBtnEl.textContent = t.refresh;
+    }
+
+    setTheme(localStorage.getItem(THEME_KEY) || 'ocean', { save: true });
+    applyStaticTexts();
+    themeColorSelect?.addEventListener('change', () => setTheme(themeColorSelect.value));
+
+    let shots = [];
+    const BATCH_SIZE = isLowPowerUI() ? 18 : 80;
+    let index = 0;
+    let autoZipTried = false;
+
+    function zipUrl() {
+      return sessionId ? `/download/${encodeURIComponent(sessionId)}.zip` : '';
+    }
+
+    async function triggerZipDownload({ userGesture = true } = {}) {
+      if (!sessionId) return alert(t.noSession);
+
+      if (isPhoneLike() && !userGesture) {
+        // Auto-attempt that keeps fallback UI visible
+        try {
+          const iframe = document.createElement('iframe');
+          iframe.style.display = 'none';
+          iframe.src = zipUrl();
+          document.body.appendChild(iframe);
+          setTimeout(() => { try { iframe.remove(); } catch {} }, 20000);
+        } catch {}
+        return;
+      }
+
+      window.location.assign(zipUrl());
+    }
+
+    async function loadShots() {
+      if (sessionId) {
+        try {
+          const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/screenshots`, { cache: 'no-store' });
+          const data = await r.json().catch(() => ({}));
+
+          if (r.ok && Array.isArray(data?.screenshots) && data.screenshots.length) {
+            shots = data.screenshots;
+            const serverMessage = data.message || t.foundShots(shots.length, data.zipBase);
+            messageEl.textContent = serverMessage;
+
+            localStorage.setItem('screenshots', JSON.stringify(shots));
+            localStorage.setItem('uploadSessionId', sessionId);
+            localStorage.setItem('message', messageEl.textContent);
+
+            if (isPhoneLike()) {
+              messageEl.textContent = `${t.mobileHint} ${serverMessage}`;
+            }
+            return;
+          }
+
+          messageEl.textContent = isPhoneLike() ? t.mobileHint : t.noShots;
+        } catch (e) {
+          console.warn('API load failed, fallback to localStorage:', e);
+        }
+      }
+
+      try {
+        shots = JSON.parse(localStorage.getItem('screenshots') || '[]');
+      } catch {
+        shots = [];
+      }
+
+      messageEl.textContent = shots.length ? t.foundShots(shots.length) : (isPhoneLike() ? t.mobileHint : t.noShots);
+    }
+
+    function loadBatch() {
+      const slice = shots.slice(index, index + BATCH_SIZE);
+      const fragment = document.createDocumentFragment();
+      slice.forEach((src) => {
+        const div = document.createElement('div');
+        div.className = 'img-box relative group';
+
+        const img = document.createElement('img');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        img.fetchPriority = index < BATCH_SIZE ? 'high' : 'low';
+        img.src = src;
+        img.alt = 'screenshot';
+        img.className = 'rounded shadow cursor-pointer w-full h-auto';
+
+        const hint = document.createElement('span');
+        hint.className = 'absolute bottom-1 left-1 bg-black/70 text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition';
+        hint.textContent = t.enlargeHint;
+
+        div.appendChild(img);
+        div.appendChild(hint);
+        div.onclick = () => openModal(src);
+        fragment.appendChild(div);
+      });
+      container.appendChild(fragment);
+      index += BATCH_SIZE;
+    }
+
+    function openModal(src) {
+      const modal = document.createElement('div');
+      modal.className = 'fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-3';
+
+      const img = document.createElement('img');
+      img.src = safeSrc(src);
+      img.alt = 'screenshot preview';
+      img.className = 'max-w-full max-h-full rounded shadow-xl';
+
+      const btn = document.createElement('button');
+      btn.className = 'absolute top-5 right-6 text-white text-3xl';
+      btn.setAttribute('aria-label', 'Close');
+      btn.textContent = '×';
+
+      modal.appendChild(img);
+      modal.appendChild(btn);
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+      });
+      btn.onclick = () => modal.remove();
+      document.body.appendChild(modal);
+    }
+
+    downloadBtn?.addEventListener('click', () => {
+      triggerZipDownload({ userGesture: true });
+    });
+
+    clearBtn?.addEventListener('click', async () => {
+      let serverClearOk = true;
+      if (sessionId) {
+        try {
+          const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}`, { method: 'DELETE' });
+          serverClearOk = r.ok;
+        } catch {
+          serverClearOk = false;
+        }
+      }
+      localStorage.removeItem('screenshots');
+      localStorage.removeItem('uploadSessionId');
+      localStorage.removeItem('message');
+      container.innerHTML = '';
+      shots = [];
+      index = 0;
+      messageEl.textContent = serverClearOk ? t.cleared : t.deleteServerFailed;
+      history.replaceState(null, '', '/results.html');
+    });
+
+    (async () => {
+      await loadShots();
+      if (shots.length) loadBatch();
+
+      if (isPhoneLike() && sessionId && !autoZipTried) {
+        autoZipTried = true;
+        setTimeout(() => {
+          messageEl.textContent = t.mobileAuto;
+          triggerZipDownload({ userGesture: false });
+        }, 500);
+      }
+
+      let ticking = false;
+      window.addEventListener('scroll', () => {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 400) {
+            if (index < shots.length) loadBatch();
+          }
+          ticking = false;
+        });
+      });
+    })();
+
+    window.addEventListener('keydown', (e) => {
+      const key = String(e.key || '').toLowerCase();
+      if (key === 'escape') {
+        document.querySelectorAll('.fixed.inset-0.z-50').forEach(el => el.remove());
+      }
+      if (key === 'd' && sessionId) {
+        e.preventDefault();
+        triggerZipDownload({ userGesture: true });
+      }
+      if (key === 'r') {
+        e.preventDefault();
+        location.reload();
+      }
+    });
+  </script>
+</body>
+</html>

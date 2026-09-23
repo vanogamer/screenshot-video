@@ -1,0 +1,1832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>🎬 Video Screenshot Generator — Studio Night</title>
+  <link rel="stylesheet" href="/styles.css?v=18.0.3">
+  <link rel="icon" type="image/x-icon" href="screenshot.png">
+</head>
+<body class="night-body theme-ocean">
+  <main class="night-shell studio-shell">
+    <header class="night-topbar studio-hero">
+      <div class="studio-hero-copy"><div class="studio-eyebrow">Local video tools</div><h1 id="pageTitle" class="night-title">🎥 Video Screenshot Generator — Site</h1><p class="studio-subtitle">Soft night interface for large video batches, folder uploads, RAM/disk checks and ZIP results.</p></div>
+      <div class="night-header-controls">
+        <label class="night-theme-field">
+          <span id="themeColorLabel" class="night-theme-label">Color</span>
+          <select id="themeColor" class="night-select night-theme-select">
+            <option value="ocean">Ocean blue</option>
+            <option value="mint">Mint green</option>
+            <option value="violet">Soft violet</option>
+            <option value="rose">Night rose</option>
+            <option value="amber">Warm amber</option>
+            <option value="graphite">Graphite</option>
+          </select>
+        </label>
+        <select id="lang" class="night-select night-lang-select">
+          <option value="en">English</option>
+          <option value="ka">ქართული</option>
+        </select>
+      </div>
+    </header>
+
+    <section class="night-panel night-status-panel">
+      <div class="night-status-head">
+        <h2 id="systemStatusTitle" class="night-section-title">🧠 System status</h2>
+        <button id="refreshSystemStatus" type="button" class="night-btn night-btn-ghost night-btn-small">Refresh</button>
+      </div>
+      <pre id="systemStatusInfo" class="night-pre">Loading RAM and disk details...</pre>
+    </section>
+
+    <form id="uploadForm" enctype="multipart/form-data" class="night-form">
+      <section class="night-panel night-picker-card night-file-card">
+        <label id="videoFilePickerLabel" for="videos" class="night-label">🎞 Video files</label>
+        <div class="tooltip">
+          <input type="file" id="videos" name="videos" multiple accept="video/*" class="night-file-input" />
+          <span id="tooltipChoose" class="tooltiptext">Select one or more video files</span>
+        </div>
+      </section>
+      <section class="night-panel night-picker-card night-folder-card">
+        <label id="folderPickerLabel" for="folderVideos" class="night-label">📂 Folder with videos</label>
+        <p id="folderPickerHint" class="night-hint">Use this when videos are inside folders and nested subfolders.</p>
+        <div class="tooltip">
+          <input type="file" id="folderVideos" name="folderVideos" multiple webkitdirectory directory accept="video/*" class="night-file-input" />
+          <span id="tooltipFolder" class="tooltiptext">Select a folder. Videos inside nested folders will be included.</span>
+        </div>
+      </section>
+      <div id="selectedInfo" class="night-info hidden"></div>
+      <section id="selectedFilesBox" class="hidden night-panel night-selected-panel">
+        <div id="selectedFilesTitle" class="night-label night-selected-title">Selected file names</div>
+        <div id="selectedFilesList" class="night-file-list"></div>
+      </section>
+      <div id="estimateInfo" class="night-info hidden"></div>
+
+      <section class="night-panel studio-settings-panel">
+        <div class="studio-panel-head">
+          <div>
+            <h2 class="night-section-title">⚙️ Capture settings</h2>
+            <p class="night-hint">Set the time range, interval, resolution and folder output mode.</p>
+          </div>
+        </div>
+        <div class="studio-settings-grid">
+          <label class="studio-field">
+            <span class="studio-field-label">Start</span>
+            <input id="startTime" type="number" step="0.1" min="0" name="startTime" placeholder="Start time (seconds)" class="night-input">
+          </label>
+          <label class="studio-field">
+            <span class="studio-field-label">End</span>
+            <input id="endTime" type="number" step="0.1" name="endTime" placeholder="End time (seconds)" class="night-input">
+          </label>
+          <label class="studio-field">
+            <span class="studio-field-label">Interval</span>
+            <select id="interval" name="interval" class="night-input">
+              <option value="0.25">0.25 sec</option>
+              <option value="0.5">0.5 sec</option>
+              <option value="1" selected>1 sec</option>
+              <option value="2">2 sec</option>
+              <option value="600">10 min</option>
+            </select>
+          </label>
+          <label class="studio-field studio-field-native">
+            <span class="studio-field-label">Resolution</span>
+            <select id="resolution" name="resolution" class="night-input native-resolution-input" disabled aria-disabled="true">
+              <option value="source" selected>Original</option>
+            </select>
+            <input type="hidden" name="resolution" value="source">
+            <span id="resolutionHint" class="native-resolution-note">Native size locked</span>
+          </label>
+          <label class="studio-field studio-field-wide">
+            <span class="studio-field-label">Output folders</span>
+            <select id="sameFolder" name="sameFolder" class="night-input">
+              <option value="false">Separate folders</option>
+              <option value="true" selected>One folder</option>
+            </select>
+          </label>
+          <label class="studio-field studio-field-wide folder-name-field">
+            <span id="outputFolderNameLabel" class="studio-field-label">Folder name</span>
+            <input id="outputFolderName" name="outputFolderName" type="text" maxlength="80" autocomplete="off" placeholder="Auto: selected video name" class="night-input">
+            <span id="outputFolderNameHint" class="native-resolution-note folder-name-note">Used in One folder mode. For several videos, the typed name becomes the shared folder name.</span>
+          </label>
+        </div>
+      </section>
+      <div class="night-actions">
+        <button id="uploadBtn" type="submit" class="night-btn night-btn-primary">📤 Upload</button>
+        <button type="button" id="pauseBtn" class="night-btn night-btn-warn hidden">⏸ Pause</button>
+        <button type="button" id="resumeBtn" class="night-btn night-btn-ok hidden">▶ Resume</button>
+        <button type="button" id="stopCurrentBtn" class="night-btn night-btn-ghost hidden">⏭ Stop current</button>
+        <button type="button" id="cancelBtn" class="night-btn night-btn-danger hidden">❌ Cancel</button>
+      </div>
+    </form>
+
+    <section id="progress" class="night-panel night-progress hidden">
+      <p id="progressText" class="night-progress-text"></p>
+      <div class="night-progress-track">
+        <div id="progressBar" class="night-progress-bar" style="width:0%"></div>
+      </div>
+      <button id="retryBtn" class="hidden night-btn night-btn-warn night-btn-inline">🔁 Retry</button>
+      <div id="cleanupInfo" class="night-info night-cleanup hidden"></div>
+
+      <!-- 📦 ZIP ღილაკი (მობილურზე) -->
+      <div id="mobileDownloadBox" class="night-mobile-zip hidden">
+        <button
+          id="downloadZipBtn"
+          class="night-btn night-btn-ok"
+          type="button"
+        >
+          📦 Download ZIP
+        </button>
+        <p id="mobileZipHelp" class="night-help-text">If the download didn't start automatically, tap the button</p>
+      </div>
+    </section>
+
+    <section id="liveList" class="night-panel night-live hidden">
+      <h2 id="fileProgressTitle" class="night-section-title">⌛ File progress</h2>
+      <div id="fileProgressList" class="night-progress-list"></div>
+    </section>
+
+  </main>
+
+<script>
+(function installEarlyConsoleNoiseFilter() {
+  const isExtensionNoise = (value) => String(value?.message || value || '').includes('Could not establish connection. Receiving end does not exist');
+  window.addEventListener('unhandledrejection', (event) => {
+    if (isExtensionNoise(event?.reason)) {
+      event.preventDefault();
+      return false;
+    }
+  }, true);
+  window.addEventListener('error', (event) => {
+    if (isExtensionNoise(event?.message || event?.error)) {
+      event.preventDefault();
+      return false;
+    }
+  }, true);
+})();
+
+const form = document.getElementById('uploadForm');
+const input = document.getElementById('videos');
+const folderInput = document.getElementById('folderVideos');
+const progress = document.getElementById('progress');
+const progressText = document.getElementById('progressText');
+const progressBar = document.getElementById('progressBar');
+const retryBtn = document.getElementById('retryBtn');
+const cancelBtn = document.getElementById('cancelBtn');
+const pauseBtn = document.getElementById('pauseBtn');
+const resumeBtn = document.getElementById('resumeBtn');
+const stopCurrentBtn = document.getElementById('stopCurrentBtn');
+const langSelect = document.getElementById('lang');
+const themeColorSelect = document.getElementById('themeColor');
+const themeColorLabel = document.getElementById('themeColorLabel');
+const pageTitle = document.getElementById('pageTitle');
+const tooltipChoose = document.getElementById('tooltipChoose');
+const tooltipFolder = document.getElementById('tooltipFolder');
+const dropZone = document.querySelector('.tooltip');
+const startTimeInput = document.getElementById('startTime');
+const endTimeInput = document.getElementById('endTime');
+const intervalSelect = document.getElementById('interval');
+const resolutionSelect = document.getElementById('resolution');
+const resolutionHint = document.getElementById('resolutionHint');
+const sameFolderSelect = document.getElementById('sameFolder');
+const outputFolderNameInput = document.getElementById('outputFolderName');
+const outputFolderNameLabel = document.getElementById('outputFolderNameLabel');
+const outputFolderNameHint = document.getElementById('outputFolderNameHint');
+const outputModeSelect = document.getElementById('outputMode');
+const customOutputPathInput = document.getElementById('customOutputPath');
+const customOutputPickerBox = document.getElementById('customOutputPickerBox');
+const chooseOutputFolderBtn = document.getElementById('chooseOutputFolderBtn');
+const customOutputPathText = document.getElementById('customOutputPathText');
+const outputLocationTitle = document.getElementById('outputLocationTitle');
+const outputLocationInfo = document.getElementById('outputLocationInfo');
+const uploadBtn = document.getElementById('uploadBtn');
+const mobileZipHelp = document.getElementById('mobileZipHelp');
+const fileProgressTitle = document.getElementById('fileProgressTitle');
+const selectedInfo = document.getElementById('selectedInfo');
+const estimateInfo = document.getElementById('estimateInfo');
+const cleanupInfo = document.getElementById('cleanupInfo');
+const systemStatusTitle = document.getElementById('systemStatusTitle');
+const systemStatusInfo = document.getElementById('systemStatusInfo');
+const refreshSystemStatusBtn = document.getElementById('refreshSystemStatus');
+const videoFilePickerLabel = document.getElementById('videoFilePickerLabel');
+const folderPickerLabel = document.getElementById('folderPickerLabel');
+const folderPickerHint = document.getElementById('folderPickerHint');
+const selectedFilesBox = document.getElementById('selectedFilesBox');
+const selectedFilesTitle = document.getElementById('selectedFilesTitle');
+const selectedFilesList = document.getElementById('selectedFilesList');
+
+const liveList = document.getElementById('liveList');
+const fileProgressList = document.getElementById('fileProgressList');
+
+const mobileDownloadBox = document.getElementById('mobileDownloadBox');
+const downloadZipBtn = document.getElementById('downloadZipBtn');
+
+let abortController;
+let eventSource;
+let sessionId;
+let isSubmitting = false;
+let zipAutoAttempted = false;
+let zipDownloadInFlight = false;
+let clientPaused = false;
+let retryQueue = [];
+let cleanupTimer = null;
+let cleanupDeadline = 0;
+let cleanupDelayMs = 0;
+let outputLocations = {};
+let outputLocationReady = false;
+let outputPreserved = false;
+let selectedCustomOutputPath = '';
+
+const LANG_KEY = 'lang';
+const THEME_KEY = 'videoScreenshotTheme';
+const OUTPUT_MODE_KEY = 'videoScreenshotOutputMode';
+const OUTPUT_CUSTOM_PATH_KEY = 'videoScreenshotCustomOutputPath';
+selectedCustomOutputPath = localStorage.getItem(OUTPUT_CUSTOM_PATH_KEY) || '';
+
+function forceOneFolderMode() {
+  if (!sameFolderSelect) return;
+  sameFolderSelect.value = 'true';
+}
+
+function forceNativeResolutionMode() {
+  if (!resolutionSelect) return;
+  resolutionSelect.value = 'source';
+  resolutionSelect.disabled = true;
+}
+
+const langs = {
+  en: {
+    pageTitle: "🎬 Upload videos",
+    header: "🎥 Video Screenshot Generator — Night",
+    themeColorLabel: "Color",
+    themeOptions: { ocean: "Ocean blue", mint: "Mint green", violet: "Soft violet", rose: "Night rose", amber: "Warm amber", graphite: "Graphite" },
+    tooltipChoose: "Select one or more video files",
+    tooltipFolder: "Select a folder. Videos inside nested folders will be included.",
+    videoFilePickerLabel: "🎞 Video files",
+    folderPickerLabel: "📂 Choose folder with videos",
+    folderPickerHint: "Use this for a whole folder. Nested folders and all videos inside them are included.",
+    selectedFilesTitle: "Selected file names",
+    startPlaceholder: "Start time (seconds)",
+    endPlaceholder: "End time (seconds)",
+    intervalLabels: { "0.25": "0.25 sec", "0.5": "0.5 sec", "1": "1 sec", "2": "2 sec", "600": "10 min" },
+    original: "Original",
+    resolutionLabels: {},
+    resolutionHint: "Native size locked — no resize/downscale.",
+    separateFolders: "Separate folders",
+    oneFolder: "One folder",
+    outputLocationTitle: "📁 Save location",
+    outputModes: { default: "Project screenshots folder", desktop: "Desktop", downloads: "Downloads", documents: "Documents", pictures: "Pictures", custom: "Choose another folder..." },
+    outputFolderNameLabel: "Folder name",
+    outputFolderNamePlaceholder: "Auto: selected video name",
+    outputFolderNameSharedPlaceholder: "Optional shared folder name",
+    outputFolderNameAutoPlaceholder: (name) => `Auto: ${name}`,
+    outputFolderNameHintEmpty: "Used in One folder mode. For several videos, the typed name becomes the shared folder name.",
+    outputFolderNameHintOne: (name) => `Leave empty to use the video name: ${name}`,
+    outputFolderNameHintMany: "For several videos, the typed name will be used as the shared folder name. Empty = auto batch name.",
+    outputChooseBtn: "📁 Choose save folder",
+    outputNoFolder: "No folder selected.",
+    outputInfoLoading: "Loading save locations...",
+    outputInfoReady: (p) => `Save to: ${p || 'default project folder'}`,
+    outputInfoCustom: "Choose a folder with the button. No path typing is needed.",
+    outputInfoError: "Save location could not be checked. Choose another local folder.",
+    outputPickCanceled: "Folder selection was canceled.",
+    outputPickUnsupported: "Folder picker is available only when the local Node server can open a native dialog.",
+    outputSavedTo: (p) => `Output folder: ${p}`,
+    systemStatusTitle: "🧠 System status",
+    refreshSystemStatus: "Refresh",
+    systemStatusLoading: "Loading RAM and disk details...",
+    systemStatusError: "Could not load RAM/disk details.",
+    systemStatusSummary: ({ ramFree, ramTotal, diskFree, outputPath, active, queued, cleanup }) => `RAM free: ${ramFree} / ${ramTotal}
+Free disk: ${diskFree}
+Default output: ${outputPath}
+Active jobs: ${active} | Queue: ${queued}
+Photo cleanup: ${cleanup}`,
+    uploadBtn: "📤 Upload",
+    cancelBtn: "❌ Cancel",
+    pauseBtn: "⏸ Pause",
+    resumeBtn: "▶ Resume",
+    stopCurrentBtn: "⏭ Stop current",
+    retryBtn: "🔁 Retry",
+    zipBtn: "📦 Download ZIP",
+    zipHelp: "If download doesn't start automatically, tap the button.",
+    fileProgressTitle: "⌛ File progress",
+    selectedFiles: (n, size) => `Selected: ${n} video(s), ${size}`,
+    estimateShots: (n) => `Estimated screenshots per video: about ${n}`,
+    estimateLoading: "Reading video durations...",
+    estimateReading: (done, total) => `Reading video durations: ${done}/${total}`,
+    estimateSummary: ({ shots, size, duration, selected }) => `Estimated photos: ${shots}
+Estimated output size: ${size}
+Total video length: ${duration}
+Selected capture time: ${selected}`,
+    estimatePartial: (n) => `${n} video(s) could not be read by the browser before upload. Upload can continue; the server will calculate the exact duration and screenshot count after upload starts.`,
+    exactEstimateBlocked: (n) => `${n} video(s) could not be read, so exact pre-check cannot be completed. Try another format or set a smaller batch.`,
+    preflightChecking: "Checking exact count and free disk space...",
+    preflightFailed: "Pre-check failed. Upload was not started.",
+    notEnoughDisk: ({ required, free, estimated }) => `Not enough free disk space. Estimated output: ${estimated}. Required with safe reserve: ${required}. Free: ${free}.`,
+    notEnoughMemory: ({ required, free }) => `Not enough free RAM for safe processing. Required: ${required}. Free now: ${free}. Close other apps or process fewer videos.`,
+    tooManyScreenshots: ({ shots, max }) => `Too many screenshots would be created (${shots}). Maximum safe batch limit: ${max}. Increase interval or select a smaller time range.`,
+    diskUnknown: "Free disk space could not be checked. Upload can continue, but stop if the drive is almost full.",
+    warningLarge: "Large output. Increase interval or set a smaller time range if it becomes slow.",
+    appliedInterval: (v) => `Applied interval: ${v} sec`,
+    invalidStart: "Start time must be 0 or greater.",
+
+    uploading: "Uploading...",
+    done: "✅ Done",
+    doneWithFailures: (n) => `Done, but ${n} video(s) failed to process.`,
+    error: "Error occurred",
+    cancel: "Upload canceled",
+    retry: "Retry",
+    select: "Select video files.",
+    invalidRange: "End time must be greater than start time.",
+    invalidInterval: "Interval must be greater than 0.",
+    preparingZip: "📦 Preparing ZIP download...",
+    zipNotReady: "ZIP is not ready yet. Please tap again in a moment.",
+    file: "File",
+    fileDone: "✅ Done",
+    fileError: "❌ Error",
+    fileCanceled: "⛔ Canceled",
+    fileStopped: "⏭ Stopped",
+    pausedAfterCurrent: "⏸ Paused. Current video can finish; next videos will wait.",
+    resumed: "▶ Resumed.",
+    currentStopping: "⏭ Stopping current video only...",
+    cleanupTimer: () => "Photos are kept in the output folder until you delete or move them.",
+    cleanupTimerPreserved: () => "Photos are kept in the output folder until you delete or move them.",
+    previewReady: ({ shots, size, selected, required, free, ram }) => `Exact preview before start:
+Photos: ${shots}
+Estimated output: ${size}
+Selected time: ${selected}
+Required disk with reserve: ${required}
+Free disk: ${free}
+Free RAM: ${ram}`,
+    previewPartial: ({ unread, shots, size, selected, required, free, ram }) => `Partial preview before start:
+Browser could not read ${unread} video(s) before upload. Upload will continue, and the server will calculate the exact duration/count after upload starts.
+Readable-file photos: ${shots}
+Readable-file estimated output: ${size}
+Readable selected time: ${selected}
+Required disk with reserve: ${required}
+Free disk: ${free}
+Free RAM: ${ram}`,
+    retryFailedOnly: (n) => `🔁 Retry failed only (${n})`,
+    timePrefix: "⏱ ",
+  },
+  ka: {
+    pageTitle: "🎬 ვიდეოს ატვირთვა",
+    header: "🎥 ვიდეო სქრინშოტების გენერაცია",
+    themeColorLabel: "ფერი",
+    themeOptions: { ocean: "ოკეანის ლურჯი", mint: "მწვანე", violet: "იისფერი", rose: "ვარდისფერი", amber: "თბილი ქარვა", graphite: "გრაფიტი" },
+    tooltipChoose: "აირჩიე ერთი ან რამდენიმე ვიდეო ფაილი",
+    tooltipFolder: "აირჩიე ფოლდერი. შიდა ფოლდერებში არსებული ვიდეოებიც დაემატება.",
+    videoFilePickerLabel: "🎞 ვიდეო ფაილები",
+    folderPickerLabel: "📂 ფოლდერი ვიდეოებით",
+    folderPickerHint: "ეს აირჩიე, როცა ვიდეოები ფოლდერებში და შიდა ფოლდერებშია.",
+    selectedFilesTitle: "არჩეული ფაილების სახელები",
+    startPlaceholder: "დაწყების დრო (წამებში)",
+    endPlaceholder: "დასრულების დრო (წამებში)",
+    intervalLabels: { "0.25": "0.25 წამი", "0.5": "0.5 წამი", "1": "1 წამი", "2": "2 წამი", "600": "10 წუთი" },
+    original: "ორიგინალი",
+    resolutionLabels: {},
+    resolutionHint: "ორიგინალი ზომა — resize/downscale არა.",
+    separateFolders: "ცალკე ფოლდერებში",
+    oneFolder: "ერთ ფოლდერში",
+    outputLocationTitle: "📁 შენახვის ადგილი",
+    outputModes: { default: "პროექტის screenshots საქაღალდე", desktop: "Desktop", downloads: "Downloads", documents: "Documents", pictures: "Pictures", custom: "სხვა ფოლდერის მონიშვნა..." },
+    outputFolderNameLabel: "ფოლდერის სახელი",
+    outputFolderNamePlaceholder: "ავტომატურად: არჩეული ვიდეოს სახელი",
+    outputFolderNameSharedPlaceholder: "საერთო ფოლდერის სახელი (არასავალდებულო)",
+    outputFolderNameAutoPlaceholder: (name) => `ავტომატურად: ${name}`,
+    outputFolderNameHintEmpty: "მუშაობს One folder რეჟიმში. რამდენიმე ვიდეოზე ჩაწერილი სახელი საერთო ფოლდერს დაერქმევა, ცარიელი = ავტომატური batch სახელი.",
+    outputFolderNameHintOne: (name) => `ცარიელი დატოვებისას ფოლდერს ვიდეოს სახელი დაერქმევა: ${name}`,
+    outputFolderNameHintMany: "რამდენიმე ვიდეოზე ჩაწერილი სახელი საერთო ფოლდერს დაერქმევა. ცარიელი = ავტომატური batch სახელი.",
+    outputChooseBtn: "📁 შენახვის ფოლდერის მონიშვნა",
+    outputNoFolder: "ფოლდერი არ არის მონიშნული.",
+    outputInfoLoading: "შენახვის ადგილები იტვირთება...",
+    outputInfoReady: (p) => `შენახვა აქ: ${p || 'პროექტის screenshots საქაღალდე'}`,
+    outputInfoCustom: "ფოლდერი ღილაკით მონიშნე. path-ის ხელით ჩაწერა არ არის საჭირო.",
+    outputInfoError: "შენახვის საქაღალდე ვერ შემოწმდა. სხვა local ფოლდერი მონიშნე.",
+    outputPickCanceled: "ფოლდერის მონიშვნა გაუქმდა.",
+    outputPickUnsupported: "ფოლდერის მონიშვნა მუშაობს მაშინ, როცა local Node server-ს native dialog-ის გახსნა შეუძლია.",
+    outputSavedTo: (p) => `Output საქაღალდე: ${p}`,
+    systemStatusTitle: "🧠 სისტემის მდგომარეობა",
+    refreshSystemStatus: "განახლება",
+    systemStatusLoading: "RAM და დისკის დეტალები იტვირთება...",
+    systemStatusError: "RAM/დისკის დეტალები ვერ ჩაიტვირთა.",
+    systemStatusSummary: ({ ramFree, ramTotal, diskFree, outputPath, active, queued, cleanup }) => `თავისუფალი RAM: ${ramFree} / ${ramTotal}
+თავისუფალი დისკი: ${diskFree}
+Default output: ${outputPath}
+აქტიური სამუშაო: ${active} | Queue: ${queued}
+ფოტოების წაშლა: ${cleanup}`,
+    uploadBtn: "📤 ატვირთვა",
+    cancelBtn: "❌ გაუქმება",
+    pauseBtn: "⏸ პაუზა",
+    resumeBtn: "▶ გაგრძელება",
+    stopCurrentBtn: "⏭ მიმდინარე ვიდეოს შეჩერება",
+    retryBtn: "🔁 სცადე თავიდან",
+    zipBtn: "📦 ZIP ჩამოტვირთვა",
+    zipHelp: "თუ ჩამოტვირთვა ავტომატურად არ დაიწყო, დააჭირე ღილაკს.",
+    fileProgressTitle: "⌛ ფაილების პროგრესი",
+    selectedFiles: (n, size) => `არჩეულია: ${n} ვიდეო, ${size}`,
+    estimateShots: (n) => `სავარაუდო სქრინშოტები თითო ვიდეოზე: დაახლოებით ${n}`,
+    estimateLoading: "ვიდეოების დრო ითვლება...",
+    estimateReading: (done, total) => `ვიდეოების დრო ითვლება: ${done}/${total}`,
+    estimateSummary: ({ shots, size, duration, selected }) => `სავარაუდო ფოტოები: ${shots}
+სავარაუდო ფოტოების ზომა: ${size}
+ვიდეოების სრული დრო: ${duration}
+მონიშნული დრო: ${selected}`,
+    estimatePartial: (n) => `${n} ვიდეოს დრო ბრაუზერმა ატვირთვამდე ვერ წაიკითხა. ატვირთვა გაგრძელდება; ზუსტ ხანგრძლივობას და სქრინშოტების რაოდენობას სერვერი upload-ის შემდეგ დაითვლის.`,
+    exactEstimateBlocked: (n) => `${n} ვიდეოს ხანგრძლივობა ბრაუზერმა ვერ წაიკითხა, ამიტომ ზუსტ წინასწარ შემოწმებას ვერ დავასრულებ. სცადე სხვა ფორმატი ან პატარა პარტია.`,
+    preflightChecking: "ზუსტი რაოდენობა და დისკის თავისუფალი ადგილი მოწმდება...",
+    preflightFailed: "წინასწარი შემოწმება ვერ შესრულდა. ატვირთვა არ დაწყებულა.",
+    notEnoughDisk: ({ required, free, estimated }) => `დისკზე ადგილი არ არის საკმარისი. სავარაუდო შედეგი: ${estimated}. უსაფრთხო მარაგით საჭიროა: ${required}. თავისუფალია: ${free}.`,
+    notEnoughMemory: ({ required, free }) => `RAM მეხსიერება უსაფრთხო დამუშავებისთვის არ არის საკმარისი. საჭიროა: ${required}. ახლა თავისუფალია: ${free}. დახურე სხვა პროგრამები ან ნაკლები ვიდეო დაამუშავე.`,
+    tooManyScreenshots: ({ shots, max }) => `ძალიან ბევრი სქრინშოტი გამოვა (${shots}). უსაფრთხო batch ლიმიტია: ${max}. გაზარდე ინტერვალი ან მონიშნე პატარა დრო.`,
+    diskUnknown: "დისკის თავისუფალი ადგილის შემოწმება ვერ მოხერხდა. გაგრძელება შეიძლება, მაგრამ თუ დისკი თითქმის სავსეა, შეწყვიტე.",
+    warningLarge: "დიდი რაოდენობა გამოვა. თუ შენელდა, ინტერვალი გაზარდე ან დროის დიაპაზონი შეამცირე.",
+    appliedInterval: (v) => `გამოყენებული ინტერვალი: ${v} წამი`,
+    invalidStart: "დაწყების დრო უნდა იყოს 0 ან მეტი.",
+
+    uploading: "ატვირთვა მიმდინარეობს...",
+    done: "✅ დასრულებულია",
+    doneWithFailures: (n) => `დასრულდა, მაგრამ ${n} ვიდეო ვერ დამუშავდა.`,
+    error: "შეცდომა მოხდა",
+    cancel: "ატვირთვა გაუქმდა",
+    retry: "სცადე თავიდან",
+    select: "აირჩიე ვიდეო ფაილები.",
+    invalidRange: "დასრულების დრო უნდა იყოს დაწყების დროზე მეტი.",
+    invalidInterval: "ინტერვალი უნდა იყოს 0-ზე მეტი.",
+    preparingZip: "📦 ZIP ჩამოტვირთვა მზადდება...",
+    zipNotReady: "ZIP ჯერ მზად არ არის. ცოტა ხანში ისევ დააჭირე.",
+    file: "ფაილი",
+    fileDone: "✅ დასრულებულია",
+    fileError: "❌ შეცდომა",
+    fileCanceled: "⛔ გაუქმდა",
+    fileStopped: "⏭ შეჩერდა",
+    pausedAfterCurrent: "⏸ პაუზაა. მიმდინარე ვიდეო შეიძლება დასრულდეს; შემდეგი ვიდეოები დაელოდება გაგრძელებას.",
+    resumed: "▶ გაგრძელდა.",
+    currentStopping: "⏭ ჩერდება მხოლოდ მიმდინარე ვიდეო...",
+    cleanupTimer: () => "ფოტოები შენახვის საქაღალდეში დარჩება, სანამ შენ არ წაშლი ან არ გადაიტან.",
+    cleanupTimerPreserved: () => "ფოტოები შენახვის საქაღალდეში დარჩება, სანამ შენ არ წაშლი ან არ გადაიტან.",
+    previewReady: ({ shots, size, selected, required, free, ram }) => `ზუსტი წინასწარი ნახვა დაწყებამდე:
+ფოტოები: ${shots}
+სავარაუდო ზომა: ${size}
+მონიშნული დრო: ${selected}
+საჭირო დისკი რეზერვით: ${required}
+თავისუფალი დისკი: ${free}
+თავისუფალი RAM: ${ram}`,
+    previewPartial: ({ unread, shots, size, selected, required, free, ram }) => `ნაწილობრივი წინასწარი ნახვა დაწყებამდე:
+ბრაუზერმა ${unread} ვიდეოს დრო ვერ წაიკითხა ატვირთვამდე. ატვირთვა მაინც გაგრძელდება და ზუსტ ხანგრძლივობას/რაოდენობას სერვერი upload-ის შემდეგ დაითვლის.
+წაკითხული ვიდეოების ფოტოები: ${shots}
+წაკითხული ვიდეოების სავარაუდო ზომა: ${size}
+წაკითხული ვიდეოების მონიშნული დრო: ${selected}
+საჭირო დისკი რეზერვით: ${required}
+თავისუფალი დისკი: ${free}
+თავისუფალი RAM: ${ram}`,
+    retryFailedOnly: (n) => `🔁 მხოლოდ ჩავარდნილების თავიდან ცდა (${n})`,
+    timePrefix: "⏱ ",
+  }
+};
+
+function normalizeLang(v) {
+  v = String(v || '').toLowerCase();
+  return v === 'ka' ? 'ka' : 'en';
+}
+
+let t = langs.en;
+const THEME_CLASS_PREFIX = 'theme-';
+const THEME_NAMES = ['ocean', 'mint', 'violet', 'rose', 'amber', 'graphite'];
+
+function normalizeTheme(value) {
+  value = String(value || '').toLowerCase();
+  return THEME_NAMES.includes(value) ? value : 'ocean';
+}
+
+function setTheme(value, { save = true } = {}) {
+  const theme = normalizeTheme(value);
+  document.body.classList.remove(...THEME_NAMES.map(name => `${THEME_CLASS_PREFIX}${name}`));
+  document.body.classList.add(`${THEME_CLASS_PREFIX}${theme}`);
+  document.documentElement.dataset.theme = theme;
+  if (themeColorSelect) themeColorSelect.value = theme;
+  if (save) localStorage.setItem(THEME_KEY, theme);
+}
+
+function applyStaticTexts() {
+  document.title = t.pageTitle;
+  if (pageTitle) pageTitle.textContent = t.header;
+  if (themeColorLabel) themeColorLabel.textContent = t.themeColorLabel;
+  if (themeColorSelect && t.themeOptions) {
+    for (const opt of Array.from(themeColorSelect.options)) {
+      if (t.themeOptions[opt.value]) opt.textContent = t.themeOptions[opt.value];
+    }
+  }
+  if (tooltipChoose) tooltipChoose.textContent = t.tooltipChoose;
+  if (tooltipFolder) tooltipFolder.textContent = t.tooltipFolder;
+  if (videoFilePickerLabel) videoFilePickerLabel.textContent = t.videoFilePickerLabel;
+  if (folderPickerLabel) folderPickerLabel.textContent = t.folderPickerLabel;
+  if (folderPickerHint) folderPickerHint.textContent = t.folderPickerHint;
+  if (selectedFilesTitle) selectedFilesTitle.textContent = t.selectedFilesTitle;
+  if (systemStatusTitle) systemStatusTitle.textContent = t.systemStatusTitle;
+  if (refreshSystemStatusBtn) refreshSystemStatusBtn.textContent = t.refreshSystemStatus;
+  if (chooseOutputFolderBtn) chooseOutputFolderBtn.textContent = t.outputChooseBtn;
+  if (startTimeInput) startTimeInput.placeholder = t.startPlaceholder;
+  if (endTimeInput) endTimeInput.placeholder = t.endPlaceholder;
+
+  if (intervalSelect) {
+    for (const opt of Array.from(intervalSelect.options)) {
+      if (t.intervalLabels && t.intervalLabels[opt.value]) opt.textContent = t.intervalLabels[opt.value];
+    }
+  }
+
+  if (resolutionSelect) {
+    for (const opt of Array.from(resolutionSelect.options)) {
+      if (opt.value === 'source') opt.textContent = t.original;
+      if (t.resolutionLabels && t.resolutionLabels[opt.value]) opt.textContent = t.resolutionLabels[opt.value];
+    }
+  }
+  if (resolutionHint) resolutionHint.textContent = t.resolutionHint;
+  forceNativeResolutionMode();
+
+  if (sameFolderSelect) {
+    for (const opt of Array.from(sameFolderSelect.options)) {
+      if (opt.value === 'false') opt.textContent = t.separateFolders;
+      if (opt.value === 'true') opt.textContent = t.oneFolder;
+    }
+  }
+
+  if (outputFolderNameLabel) outputFolderNameLabel.textContent = t.outputFolderNameLabel;
+  updateFolderNameUI();
+
+  if (outputLocationTitle) outputLocationTitle.textContent = t.outputLocationTitle;
+  if (outputModeSelect && t.outputModes) {
+    for (const opt of Array.from(outputModeSelect.options)) {
+      if (t.outputModes[opt.value]) opt.textContent = t.outputModes[opt.value];
+    }
+  }
+  updateOutputLocationUI(false);
+
+  if (uploadBtn) uploadBtn.textContent = t.uploadBtn;
+  if (cancelBtn) cancelBtn.textContent = t.cancelBtn;
+  if (pauseBtn) pauseBtn.textContent = t.pauseBtn;
+  if (resumeBtn) resumeBtn.textContent = t.resumeBtn;
+  if (stopCurrentBtn) stopCurrentBtn.textContent = t.stopCurrentBtn;
+  if (retryBtn) retryBtn.textContent = t.retryBtn;
+  if (downloadZipBtn) downloadZipBtn.textContent = t.zipBtn;
+  if (mobileZipHelp) mobileZipHelp.textContent = t.zipHelp;
+  if (fileProgressTitle) fileProgressTitle.textContent = t.fileProgressTitle;
+}
+
+function setLang(lang, { save = true } = {}) {
+  const normalized = normalizeLang(lang);
+  t = langs[normalized] || langs.en;
+  document.documentElement.lang = normalized;
+  if (langSelect) langSelect.value = normalized;
+  if (save) localStorage.setItem(LANG_KEY, normalized);
+  applyStaticTexts();
+}
+
+setTheme(localStorage.getItem(THEME_KEY) || 'ocean', { save: true });
+setLang(localStorage.getItem(LANG_KEY) || 'en', { save: true });
+forceNativeResolutionMode();
+forceOneFolderMode();
+langSelect.addEventListener('change', () => {
+  setLang(langSelect.value);
+  updateSelectionInfo();
+});
+themeColorSelect?.addEventListener('change', () => setTheme(themeColorSelect.value));
+sameFolderSelect?.addEventListener('change', () => {
+  updateSelectionInfo();
+});
+outputFolderNameInput?.addEventListener('input', () => {
+  updateFolderNameUI();
+});
+
+function isHandheldLike() {
+  if (navigator.userAgentData && typeof navigator.userAgentData.mobile === 'boolean') {
+    if (navigator.userAgentData.mobile) return true;
+  }
+  const ua = /Android|iPhone|iPad|iPod|Mobi|Mobile/i.test(navigator.userAgent || '');
+  const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const narrow = window.matchMedia && window.matchMedia('(max-width: 1024px)').matches;
+  return ua || (coarse && narrow);
+}
+
+function isLowPowerUI() {
+  const reducedData = window.matchMedia && window.matchMedia('(prefers-reduced-data: reduce)').matches;
+  const lowMemory = Number(navigator.deviceMemory || 8) <= 4;
+  const lowCpu = Number(navigator.hardwareConcurrency || 8) <= 4;
+  return isHandheldLike() || reducedData || lowMemory || lowCpu;
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]));
+}
+
+function folderBaseNameFromFile(file) {
+  const rawName = String(file?.name || fileDisplayName(file) || '').replace(/[\/]+/g, '/').split('/').pop();
+  const dot = rawName.lastIndexOf('.');
+  const base = dot > 0 ? rawName.slice(0, dot) : rawName;
+  return base.trim() || 'video';
+}
+
+function getAutomaticSingleFolderName(files = getSelectedFiles()) {
+  if (!Array.isArray(files) || files.length !== 1) return '';
+  return folderBaseNameFromFile(files[0]);
+}
+
+function getOutputFolderNameForSelection(files = getSelectedFiles()) {
+  const typed = String(outputFolderNameInput?.value || '').trim();
+  if (typed) return typed;
+  return Array.isArray(files) && files.length === 1 ? getAutomaticSingleFolderName(files) : '';
+}
+
+function updateFolderNameUI(files = getSelectedFiles()) {
+  if (!outputFolderNameInput) return;
+
+  const sameFolder = sameFolderSelect?.value === 'true';
+  const autoName = sameFolder ? getAutomaticSingleFolderName(files) : '';
+  const manySelected = sameFolder && files.length > 1;
+  outputFolderNameInput.disabled = !sameFolder;
+  outputFolderNameInput.placeholder = autoName
+    ? (t.outputFolderNameAutoPlaceholder ? t.outputFolderNameAutoPlaceholder(autoName) : autoName)
+    : (manySelected ? (t.outputFolderNameSharedPlaceholder || 'Optional shared folder name') : (t.outputFolderNamePlaceholder || 'Auto: selected video name'));
+
+  if (outputFolderNameHint) {
+    if (!sameFolder) {
+      outputFolderNameHint.textContent = t.outputFolderNameHintEmpty || '';
+    } else if (manySelected) {
+      outputFolderNameHint.textContent = t.outputFolderNameHintMany || '';
+    } else if (autoName) {
+      outputFolderNameHint.textContent = t.outputFolderNameHintOne ? t.outputFolderNameHintOne(autoName) : autoName;
+    } else {
+      outputFolderNameHint.textContent = t.outputFolderNameHintEmpty || '';
+    }
+  }
+}
+
+function safeIdPart(str) {
+  return String(str ?? '').replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function createSessionId() {
+  const c = window.crypto || window.msCrypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function formatBytes(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = n / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) { value /= 1024; i++; }
+  return `${value.toFixed(value >= 10 || i === 0 ? 1 : 2)} ${units[i]}`;
+}
+
+function formatDuration(seconds) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function isVideoFile(file) {
+  const name = String(file?.name || '');
+  const type = String(file?.type || '');
+  return type.startsWith('video/') || /\.(mp4|mov|avi|mkv|webm|flv|wmv|mpg|mpeg|m4v|ts|m2ts|mts)$/i.test(name);
+}
+
+function fileRelativePath(file) {
+  return String(file?.webkitRelativePath || file?.relativePath || file?.name || '');
+}
+
+function fileDisplayName(file) {
+  return fileRelativePath(file) || String(file?.name || 'video');
+}
+
+function getSelectedFiles() {
+  const sources = [input?.files, folderInput?.files];
+  const out = [];
+  const seen = new Set();
+
+  for (const list of sources) {
+    for (const file of Array.from(list || [])) {
+      if (!isVideoFile(file)) continue;
+      const key = `${fileRelativePath(file)}::${file.size}::${file.lastModified}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(file);
+    }
+  }
+
+  return out.sort((a, b) => fileDisplayName(a).localeCompare(fileDisplayName(b), undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+function getTimeSettings() {
+  const intervalVal = Number(intervalSelect?.value || 1);
+  const start = startTimeInput.value === '' ? 0 : Number(startTimeInput.value);
+  const endRaw = endTimeInput?.value;
+  const end = endRaw === '' ? null : Number(endRaw);
+  if (!Number.isFinite(intervalVal) || intervalVal <= 0) return { ok: false, message: t.invalidInterval };
+  if (!Number.isFinite(start) || start < 0) return { ok: false, message: t.invalidStart };
+  if (end !== null && (!Number.isFinite(end) || end <= start)) return { ok: false, message: t.invalidRange };
+  return { ok: true, interval: intervalVal, start, end };
+}
+
+function countCaptureFrames(duration, start, end, interval) {
+  const safeDuration = Math.max(0, Number(duration) || 0);
+  const safeStart = Math.min(Math.max(0, Number(start) || 0), safeDuration);
+  const effectiveEnd = (end !== null && Number(end) > safeStart) ? Math.min(Number(end), safeDuration) : safeDuration;
+  const segment = Math.max(0, effectiveEnd - safeStart);
+  const epsilon = Math.min(1e-6, interval / 1000);
+  return {
+    count: Math.max(1, Math.floor((segment + epsilon) / interval) + 1),
+    selectedSeconds: segment,
+  };
+}
+
+function normalizeResolutionValue(value) {
+  // Native/original frame size is locked. The browser estimator and the server both use the video's own dimensions.
+  return 'source';
+}
+
+function selectedResolutionSize(meta) {
+  const value = normalizeResolutionValue('source');
+  const match = value.match(/^(\d+)[xX:](\d+)$/);
+  if (match) return { width: Number(match[1]), height: Number(match[2]) };
+  const width = Math.max(1, Number(meta?.width) || 1280);
+  const height = Math.max(1, Number(meta?.height) || 720);
+  return { width, height };
+}
+
+function estimatePngBytes(width, height) {
+  // Real PNG size is known only after encoding; 4.25 bytes/pixel matches the server-side safe disk estimate.
+  const pixels = Math.max(1, Number(width) || 1280) * Math.max(1, Number(height) || 720);
+  return Math.ceil((pixels * 4.25) + 16384);
+}
+
+function estimateProcessingMemoryBytes(width, height) {
+  const pixels = Math.max(1, Number(width) || 1280) * Math.max(1, Number(height) || 720);
+  const dynamic = Math.ceil(pixels * 48);
+  const minBase = 1024 * 1024 * 1024;
+  const min4k = 1536 * 1024 * 1024;
+  return Math.max(minBase, pixels >= 3840 * 2160 ? min4k : minBase, dynamic);
+}
+
+let estimateTimer = null;
+let estimateRunId = 0;
+// Browser-side preview is enabled so the UI can estimate duration/count before upload.
+// If a specific browser/video still cannot expose metadata, upload continues and
+// the server performs the authoritative FFprobe/FFmpeg count after upload starts.
+const CLIENT_VIDEO_METADATA_PREVIEW_ENABLED = true;
+const videoMetaCache = new Map();
+
+function metadataKey(file) {
+  return `${fileRelativePath(file)}::${file.name}::${file.size}::${file.lastModified}`;
+}
+
+function readVideoMetadata(file) {
+  if (!CLIENT_VIDEO_METADATA_PREVIEW_ENABLED) {
+    const err = new Error('client_metadata_preview_disabled');
+    err.code = 'CLIENT_METADATA_PREVIEW_DISABLED';
+    return Promise.reject(err);
+  }
+
+  const key = metadataKey(file);
+  if (videoMetaCache.has(key)) return videoMetaCache.get(key);
+
+  const promise = new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    let done = false;
+
+    const cleanup = () => {
+      // Do not force video.load() after revoking a blob URL: Chrome can print
+      // ERR_REQUEST_RANGE_NOT_SATISFIABLE for damaged/odd MP4 metadata even when upload can continue.
+      try { video.pause(); } catch {}
+      video.removeAttribute('src');
+      try { URL.revokeObjectURL(url); } catch {}
+    };
+
+    const finish = (fn, value) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      fn(value);
+    };
+
+    const buildMeta = () => ({
+      duration: Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0,
+      width: video.videoWidth || 0,
+      height: video.videoHeight || 0,
+    });
+
+    const timeout = setTimeout(() => finish(reject, new Error('metadata_timeout')), 20000);
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+
+    const tryResolve = () => {
+      const meta = buildMeta();
+      if (meta.duration > 0) {
+        clearTimeout(timeout);
+        finish(resolve, meta);
+        return true;
+      }
+      return false;
+    };
+
+    video.onloadedmetadata = () => {
+      if (tryResolve()) return;
+
+      // Some browser/file combinations expose videoWidth/videoHeight first and
+      // duration a little later. Give durationchange a short chance before the
+      // UI marks the file as unreadable. The server can still process it.
+      const lateTimer = setTimeout(() => {
+        if (tryResolve()) return;
+        clearTimeout(timeout);
+        finish(reject, new Error('bad_duration'));
+      }, 3500);
+
+      video.ondurationchange = () => {
+        if (tryResolve()) clearTimeout(lateTimer);
+      };
+
+      try {
+        if (!Number.isFinite(video.duration) || video.duration <= 0) {
+          video.currentTime = 0.001;
+        }
+      } catch {}
+    };
+    video.onerror = () => {
+      clearTimeout(timeout);
+      finish(reject, new Error('metadata_error'));
+    };
+    video.src = url;
+  });
+
+  videoMetaCache.set(key, promise);
+  return promise;
+}
+
+function updateSelectionInfo() {
+  const files = getSelectedFiles();
+  updateFolderNameUI(files);
+  if (selectedInfo) {
+    if (!files.length) {
+      selectedInfo.classList.add('hidden');
+      selectedInfo.textContent = '';
+    } else {
+      const totalSize = files.reduce((sum, f) => sum + (Number(f.size) || 0), 0);
+      selectedInfo.textContent = t.selectedFiles(files.length, formatBytes(totalSize));
+      selectedInfo.classList.remove('hidden');
+    }
+  }
+
+  if (selectedFilesBox && selectedFilesList) {
+    if (!files.length) {
+      selectedFilesBox.classList.add('hidden');
+      selectedFilesList.innerHTML = '';
+    } else {
+      selectedFilesBox.classList.remove('hidden');
+      const maxVisible = isLowPowerUI() ? 40 : 90;
+      selectedFilesList.innerHTML = files.slice(0, maxVisible).map((file, idx) => {
+        const name = fileDisplayName(file);
+        const size = formatBytes(Number(file.size) || 0);
+        return `<div title="${escapeHtml(name)}"><span class="night-muted">${idx + 1}.</span> ${escapeHtml(name)} <span class="night-subtle">(${size})</span></div>`;
+      }).join('');
+      if (files.length > maxVisible) {
+        const more = document.createElement('div');
+        more.className = 'night-muted-line';
+        more.textContent = `+${files.length - maxVisible} more`;
+        selectedFilesList.appendChild(more);
+      }
+    }
+  }
+
+  scheduleEstimateUpdate();
+}
+
+function scheduleEstimateUpdate() {
+  clearTimeout(estimateTimer);
+  estimateTimer = setTimeout(updateEstimateInfo, isLowPowerUI() ? 420 : 180);
+}
+
+async function calculateSelectionEstimate(files, settings, { strict = false, currentRun = null, onProgress = null } = {}) {
+  let totalShots = 0;
+  let totalBytes = 0;
+  let totalDuration = 0;
+  let selectedSeconds = 0;
+  let unread = 0;
+  let requiredMemoryBytes = 1024 * 1024 * 1024;
+  const unreadFiles = [];
+  let completed = 0;
+  let nextIndex = 0;
+  const workerCount = isLowPowerUI() ? 1 : Math.min(strict ? 3 : 4, files.length || 1);
+
+  async function estimateOne(file) {
+    try {
+      const meta = await readVideoMetadata(file);
+      if (currentRun !== null && currentRun !== estimateRunId) return;
+
+      if (!Number.isFinite(meta.duration) || meta.duration <= 0) {
+        throw new Error('bad_duration');
+      }
+
+      const frames = countCaptureFrames(meta.duration, settings.start, settings.end, settings.interval);
+      const dims = selectedResolutionSize(meta);
+      totalDuration += meta.duration;
+      selectedSeconds += frames.selectedSeconds;
+      totalShots += frames.count;
+      totalBytes += frames.count * estimatePngBytes(dims.width, dims.height);
+      requiredMemoryBytes = Math.max(requiredMemoryBytes, estimateProcessingMemoryBytes(dims.width, dims.height));
+    } catch {
+      if (currentRun !== null && currentRun !== estimateRunId) return;
+      unread += 1;
+      unreadFiles.push(fileDisplayName(file));
+
+      if (!strict && settings.end !== null) {
+        const fakeDuration = Math.max(settings.end, settings.start);
+        const frames = countCaptureFrames(fakeDuration, settings.start, settings.end, settings.interval);
+        const dims = selectedResolutionSize(null);
+        selectedSeconds += frames.selectedSeconds;
+        totalShots += frames.count;
+        totalBytes += frames.count * estimatePngBytes(dims.width, dims.height);
+      requiredMemoryBytes = Math.max(requiredMemoryBytes, estimateProcessingMemoryBytes(dims.width, dims.height));
+      }
+    } finally {
+      if (currentRun === null || currentRun === estimateRunId) {
+        completed += 1;
+        if (typeof onProgress === 'function') {
+          onProgress({ completed, total: files.length, totalShots, totalBytes, totalDuration, selectedSeconds, unread, unreadFiles });
+        }
+      }
+    }
+  }
+
+  async function worker() {
+    while (currentRun === null || currentRun === estimateRunId) {
+      const i = nextIndex++;
+      if (i >= files.length) break;
+      await estimateOne(files[i]);
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return {
+    ok: !strict || unread === 0,
+    totalShots,
+    totalBytes,
+    requiredMemoryBytes,
+    totalDuration,
+    selectedSeconds,
+    unread,
+    unreadFiles,
+    completed,
+  };
+}
+
+async function updateEstimateInfo() {
+  const files = getSelectedFiles();
+  const currentRun = ++estimateRunId;
+
+  if (!estimateInfo) return;
+  if (!files.length) {
+    estimateInfo.classList.add('hidden');
+    estimateInfo.textContent = '';
+    return;
+  }
+
+  const settings = getTimeSettings();
+  if (!settings.ok) {
+    estimateInfo.textContent = settings.message;
+    estimateInfo.classList.remove('hidden');
+    return;
+  }
+
+  const renderEstimate = ({ completed = 0, totalShots = 0, totalBytes = 0, totalDuration = 0, selectedSeconds = 0, unread = 0 } = {}) => {
+    if (currentRun !== estimateRunId) return;
+
+    const loading = completed < files.length ? `${t.estimateReading(completed, files.length)}\n` : '';
+    const warning = totalShots > 5000 ? `\n⚠️ ${t.warningLarge}` : '';
+    const partial = unread ? `\n${t.estimatePartial(unread)}` : '';
+
+    estimateInfo.textContent = `${loading}${t.estimateSummary({
+      shots: totalShots.toLocaleString(),
+      size: formatBytes(totalBytes),
+      duration: formatDuration(totalDuration),
+      selected: formatDuration(selectedSeconds),
+    })}${warning}${partial}`;
+    estimateInfo.classList.remove('hidden');
+  };
+
+  estimateInfo.textContent = t.estimateLoading;
+  estimateInfo.classList.remove('hidden');
+  renderEstimate({ completed: 0 });
+
+  const result = await calculateSelectionEstimate(files, settings, {
+    strict: false,
+    currentRun,
+    onProgress: renderEstimate,
+  });
+
+  if (currentRun !== estimateRunId) return;
+  renderEstimate({ ...result, completed: files.length });
+}
+
+function setSelectedFiles(files) {
+  const list = Array.from(files || []).filter(f => String(f.type || '').startsWith('video/') || /\.(mp4|mov|avi|mkv|webm|flv|wmv|mpg|mpeg|m4v|ts|m2ts|mts)$/i.test(f.name || ''));
+  if (!list.length) return;
+  if (typeof DataTransfer === 'undefined') return;
+  const dt = new DataTransfer();
+  list.forEach(file => dt.items.add(file));
+  input.files = dt.files;
+  updateSelectionInfo();
+}
+
+function setupDragDrop() {
+  if (!dropZone) return;
+  ['dragenter', 'dragover'].forEach(type => {
+    dropZone.addEventListener(type, (e) => {
+      if (isSubmitting) return;
+      e.preventDefault();
+      dropZone.classList.add('drop-active');
+    });
+  });
+  ['dragleave', 'drop'].forEach(type => {
+    dropZone.addEventListener(type, () => dropZone.classList.remove('drop-active'));
+  });
+  dropZone.addEventListener('drop', (e) => {
+    if (isSubmitting) return;
+    e.preventDefault();
+    setSelectedFiles(e.dataTransfer?.files);
+  });
+}
+
+function isEditableShortcutTarget(target) {
+  if (!target) return false;
+  const tag = String(target.tagName || '').toLowerCase();
+  return target.isContentEditable || ['input', 'textarea', 'select'].includes(tag);
+}
+
+function openVideoFilePicker(kind) {
+  if (isSubmitting) return;
+  const picker = kind === 'folder' ? folderInput : input;
+  if (!picker || picker.disabled) return;
+  picker.click();
+}
+
+function setupPickerShortcuts() {
+  window.addEventListener('keydown', (event) => {
+    if (!event.ctrlKey || event.altKey || event.metaKey || event.shiftKey) return;
+    if (isEditableShortcutTarget(event.target)) return;
+
+    const physicalKey = String(event.code || '');
+    const fallbackKey = String(event.key || '').toLowerCase();
+    if (physicalKey === 'KeyI' || (!physicalKey && fallbackKey === 'i')) {
+      event.preventDefault();
+      openVideoFilePicker('files');
+    } else if (physicalKey === 'KeyK' || (!physicalKey && fallbackKey === 'k')) {
+      event.preventDefault();
+      openVideoFilePicker('folder');
+    }
+  });
+}
+
+function setBusy(busy) {
+  isSubmitting = Boolean(busy);
+  const disableTargets = [input, folderInput, startTimeInput, endTimeInput, intervalSelect, resolutionSelect, sameFolderSelect, outputFolderNameInput, outputModeSelect, chooseOutputFolderBtn, uploadBtn, langSelect];
+  disableTargets.forEach(el => { if (el) el.disabled = busy; });
+  if (!busy) updateFolderNameUI();
+}
+
+function validateInputs() {
+  const intervalVal = Number(intervalSelect?.value || 1);
+  const start = startTimeInput.value === '' ? 0 : Number(startTimeInput.value);
+  const endRaw = endTimeInput?.value;
+  const end = endRaw === '' ? null : Number(endRaw);
+
+  if (!Number.isFinite(start) || start < 0) {
+    alert(t.invalidStart);
+    return false;
+  }
+  if (!Number.isFinite(intervalVal) || intervalVal <= 0) {
+    alert(t.invalidInterval);
+    return false;
+  }
+  if (end !== null && Number.isFinite(end) && end <= start) {
+    alert(t.invalidRange);
+    return false;
+  }
+  return true;
+}
+
+function ensureFileRow(fileKey, filename) {
+  const safeKey = safeIdPart(fileKey);
+  let row = document.getElementById(`row-${safeKey}`);
+  if (!row) {
+    row = document.createElement('div');
+    row.id = `row-${safeKey}`;
+    row.className = 'night-file-progress-row';
+
+    const top = document.createElement('div');
+    top.className = 'night-file-progress-top';
+
+    const label = document.createElement('div');
+    label.className = 'night-file-progress-name';
+    label.innerHTML = `${escapeHtml(t.file)}: <span class="night-file-progress-filename" title="${escapeHtml(filename)}">${escapeHtml(filename)}</span>`;
+
+    const pct = document.createElement('div');
+    pct.id = `pct-${safeKey}`;
+    pct.className = 'night-file-progress-pct';
+    pct.textContent = '0%';
+
+    top.appendChild(label);
+    top.appendChild(pct);
+
+    const barWrap = document.createElement('div');
+    barWrap.className = 'night-mini-track';
+
+    const bar = document.createElement('div');
+    bar.id = `bar-${safeKey}`;
+    bar.className = 'night-mini-bar';
+    bar.style.width = '0%';
+    barWrap.appendChild(bar);
+
+    const meta = document.createElement('div');
+    meta.id = `meta-${safeKey}`;
+    meta.className = 'night-file-progress-meta';
+    meta.textContent = '—';
+
+    row.appendChild(top);
+    row.appendChild(barWrap);
+    row.appendChild(meta);
+    fileProgressList.appendChild(row);
+  }
+  if (liveList.classList.contains('hidden')) liveList.classList.remove('hidden');
+  return safeKey;
+}
+
+const pendingFileRowUpdates = new Map();
+let fileRowFlushTimer = null;
+
+function queueFileRowUpdate(fileKey, data) {
+  pendingFileRowUpdates.set(fileKey, { ...(pendingFileRowUpdates.get(fileKey) || {}), ...data });
+  if (fileRowFlushTimer) return;
+
+  const flushDelay = isLowPowerUI() ? 180 : 80;
+  fileRowFlushTimer = setTimeout(() => {
+    fileRowFlushTimer = null;
+    const updates = Array.from(pendingFileRowUpdates.entries());
+    pendingFileRowUpdates.clear();
+    requestAnimationFrame(() => {
+      for (const [key, value] of updates) {
+        updateFileRow(key, value);
+      }
+    });
+  }, flushDelay);
+}
+
+function updateFileRow(fileKey, { percent, timemark, status, filename }) {
+  const safeKey = ensureFileRow(fileKey, filename || fileKey);
+  const pct = document.getElementById(`pct-${safeKey}`);
+  const bar = document.getElementById(`bar-${safeKey}`);
+  const meta = document.getElementById(`meta-${safeKey}`);
+
+  const pctVal = Math.round(Math.max(0, Math.min(100, Number(percent) || 0)));
+  if (pct) pct.textContent = `${pctVal}%`;
+  if (bar) bar.style.width = `${pctVal}%`;
+  if (meta) {
+    let text = timemark ? `${t.timePrefix || '⏱ '}${timemark}` : '';
+    if (status === 'done') text = t.fileDone;
+    if (status === 'error') text = t.fileError;
+    if (status === 'canceled') text = t.fileCanceled;
+    if (status === 'stopped') text = t.fileStopped;
+    meta.textContent = text || '—';
+  }
+}
+
+function openSSE() {
+  if (!sessionId) return;
+  try { eventSource?.close(); } catch {}
+  eventSource = new EventSource(`/progress/${encodeURIComponent(sessionId)}`);
+
+  eventSource.onmessage = (e) => {
+    if (!e.data) return;
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+
+    if (msg.type === 'snapshot' && msg.files) {
+      for (const [fk, data] of Object.entries(msg.files)) {
+        queueFileRowUpdate(fk, { ...data, filename: data.filename || fk });
+      }
+    } else if (msg.type === 'start') {
+      queueFileRowUpdate(msg.fileKey, { ...msg.file, filename: msg.file?.filename || msg.fileKey });
+    } else if (msg.type === 'progress' || msg.type === 'done' || msg.type === 'end' || msg.type === 'error' || msg.type === 'stopped' || msg.type === 'canceled') {
+      queueFileRowUpdate(msg.fileKey, {
+        percent: msg.percent,
+        timemark: msg.timemark,
+        status: msg.status,
+        filename: msg.filename || msg.fileKey
+      });
+    }
+  };
+
+  eventSource.onerror = () => {
+    // keep quiet; browser auto-reconnects EventSource
+  };
+}
+
+function zipUrl() {
+  if (!sessionId) return '';
+  return `/download/${encodeURIComponent(sessionId)}.zip`;
+}
+
+async function isZipReady() {
+  if (!sessionId) return false;
+  try {
+    const r = await fetch(`/api/session/${encodeURIComponent(sessionId)}/download-status`, { cache: 'no-store' });
+    if (!r.ok) return false;
+    const j = await r.json();
+    return Boolean(j?.ready);
+  } catch {
+    return false;
+  }
+}
+
+async function waitForZipReady(maxMs = 12000) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    if (await isZipReady()) return true;
+    await new Promise(r => setTimeout(r, 700));
+  }
+  return false;
+}
+
+function triggerZipDownload({ userGesture = false } = {}) {
+  const url = zipUrl();
+  if (!url || zipDownloadInFlight) return false;
+
+  zipDownloadInFlight = true;
+  setTimeout(() => { zipDownloadInFlight = false; }, 1500);
+
+  if (userGesture || isHandheldLike()) {
+    window.location.assign(url);
+    return true;
+  }
+
+  // Desktop fallback without navigating away
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  try { a.click(); } catch {}
+  setTimeout(() => { try { a.remove(); } catch {} }, 1000);
+
+  // Some browsers ignore programmatic <a download>; iframe fallback
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = url;
+  document.body.appendChild(iframe);
+  setTimeout(() => {
+    try { iframe.remove(); } catch {}
+  }, 30000);
+
+  return true;
+}
+
+function hideMobileDownloadUI() {
+  if (!mobileDownloadBox) return;
+  mobileDownloadBox.classList.add('hidden');
+  zipAutoAttempted = false;
+  if (downloadZipBtn) downloadZipBtn.onclick = null;
+}
+
+function showMobileDownloadUI() {
+  startCleanupCountdown(cleanupDelayMs);
+  if (!mobileDownloadBox) return;
+  mobileDownloadBox.classList.remove('hidden');
+  if (downloadZipBtn) {
+    downloadZipBtn.onclick = async () => {
+      const ready = await isZipReady();
+      if (!ready) {
+        if (progressText) progressText.textContent = t.zipNotReady;
+        return;
+      }
+      triggerZipDownload({ userGesture: true });
+    };
+  }
+}
+
+async function tryAutoZipOnMobile() {
+  if (!isHandheldLike() || zipAutoAttempted) return;
+  zipAutoAttempted = true;
+
+  if (progressText) progressText.textContent = t.preparingZip;
+  const ready = await waitForZipReady(15000);
+  if (!ready) {
+    if (progressText) progressText.textContent = t.zipNotReady;
+    return;
+  }
+  triggerZipDownload({ userGesture: false });
+}
+
+// ========== სესიის ID (რჩება იგივე) ==========
+sessionId = localStorage.getItem('uploadSessionId') || createSessionId();
+localStorage.setItem('uploadSessionId', sessionId);
+forceNativeResolutionMode();
+updateSelectionInfo();
+input.addEventListener('change', updateSelectionInfo);
+folderInput?.addEventListener('change', updateSelectionInfo);
+[startTimeInput, endTimeInput].forEach(el => el?.addEventListener('input', updateSelectionInfo));
+intervalSelect?.addEventListener('change', updateSelectionInfo);
+resolutionSelect?.addEventListener('change', () => { forceNativeResolutionMode(); updateSelectionInfo(); });
+refreshSystemStatusBtn?.addEventListener('click', () => loadSystemStatus(true));
+
+function getSelectedOutputPath() {
+  return '';
+}
+
+function setCustomOutputPath(value, { save = true } = {}) {
+  selectedCustomOutputPath = String(value || '').trim();
+  if (customOutputPathInput) customOutputPathInput.value = selectedCustomOutputPath;
+  if (customOutputPathText) customOutputPathText.textContent = selectedCustomOutputPath || t.outputNoFolder;
+  if (save) {
+    if (selectedCustomOutputPath) localStorage.setItem(OUTPUT_CUSTOM_PATH_KEY, selectedCustomOutputPath);
+    else localStorage.removeItem(OUTPUT_CUSTOM_PATH_KEY);
+  }
+}
+
+function updateOutputLocationUI(save = true) {
+  const mode = outputModeSelect?.value || 'default';
+  const isCustom = mode === 'custom';
+  const selectedPath = getSelectedOutputPath();
+
+  if (save) localStorage.setItem(OUTPUT_MODE_KEY, mode);
+  if (customOutputPickerBox) customOutputPickerBox.classList.toggle('hidden', !isCustom);
+  if (customOutputPathInput) customOutputPathInput.value = selectedCustomOutputPath || '';
+  if (customOutputPathText) customOutputPathText.textContent = selectedCustomOutputPath || t.outputNoFolder;
+
+  if (outputLocationInfo) {
+    if (!outputLocationReady) {
+      outputLocationInfo.textContent = t.outputInfoLoading;
+    } else if (isCustom) {
+      outputLocationInfo.textContent = selectedCustomOutputPath ? t.outputInfoReady(selectedCustomOutputPath) : t.outputInfoCustom;
+    } else {
+      outputLocationInfo.textContent = t.outputInfoReady(selectedPath || outputLocations.default || '');
+    }
+  }
+}
+
+async function pickOutputFolder() {
+  return null;
+}
+
+async function loadOutputLocations() {
+  outputLocations = {};
+  outputLocationReady = true;
+}
+
+async function loadSystemStatus(force = false) {
+  if (!systemStatusInfo) return;
+  if (force || !systemStatusInfo.dataset.loaded) systemStatusInfo.textContent = t.systemStatusLoading;
+  try {
+    const healthResponse = await fetch('/api/health', { cache: 'no-store' });
+    const health = await healthResponse.json().catch(() => ({}));
+    const diskText = health?.disk?.freeText || 'unknown';
+    const outputPath = health?.outputPath || '';
+    const memory = health?.memory || {};
+    systemStatusInfo.dataset.loaded = '1';
+    systemStatusInfo.textContent = t.systemStatusSummary({
+      ramFree: memory.freeText || 'unknown',
+      ramTotal: memory.totalText || 'unknown',
+      diskFree: diskText,
+      outputPath,
+      active: Number(health?.activeJobs || 0),
+      queued: Number(health?.queuedJobs || 0),
+      cleanup: health?.cleanupMaxAgeText === 'never' ? (document.documentElement.lang === 'ka' ? 'არასდროს ავტომატურად' : 'never automatically') : (health?.cleanupMaxAgeText || 'never'),
+    });
+  } catch (err) {
+    console.warn('Health load failed:', err);
+    systemStatusInfo.textContent = t.systemStatusError;
+  }
+}
+
+loadSystemStatus(true);
+setupDragDrop();
+setupPickerShortcuts();
+
+function formatCountdown(ms) {
+  const total = Math.max(0, Math.ceil(Number(ms || 0) / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function startCleanupCountdown(delayMs = cleanupDelayMs) {
+  if (!cleanupInfo) return;
+  cleanupDelayMs = Math.max(0, Number(delayMs) || 0);
+  cleanupInfo.classList.remove('hidden');
+  clearInterval(cleanupTimer);
+  cleanupInfo.textContent = outputPreserved && t.cleanupTimerPreserved ? t.cleanupTimerPreserved('') : t.cleanupTimer('');
+}
+
+function showPreflightPreview(data, exactEstimate) {
+  if (!estimateInfo || !data) return;
+  cleanupDelayMs = Number(data.cleanupMaxAgeMs || 0);
+  outputPreserved = true;
+  const unread = Number(exactEstimate?.unread || 0);
+  const previewPayload = {
+    unread: unread.toLocaleString(),
+    shots: Number(exactEstimate?.totalShots || 0).toLocaleString(),
+    size: formatBytes(exactEstimate?.totalBytes || 0),
+    selected: formatDuration(exactEstimate?.selectedSeconds || 0),
+    required: data.requiredSize || '?',
+    free: data.freeSize || '?',
+    ram: data.memoryFreeSize || '?',
+  };
+  const preview = unread > 0 && typeof t.previewPartial === 'function'
+    ? t.previewPartial(previewPayload)
+    : t.previewReady(previewPayload);
+  estimateInfo.textContent = `${preview}\n${t.outputSavedTo(data.outputDisplayPath || getSelectedOutputPath() || '')}`;
+  estimateInfo.classList.remove('hidden');
+}
+
+function setProcessingControls(active) {
+  if (pauseBtn) pauseBtn.classList.toggle('hidden', !active || clientPaused);
+  if (resumeBtn) resumeBtn.classList.toggle('hidden', !active || !clientPaused);
+  if (stopCurrentBtn) stopCurrentBtn.classList.toggle('hidden', !active);
+  if (cancelBtn) cancelBtn.classList.toggle('hidden', !active);
+}
+
+async function waitIfClientPaused() {
+  while (clientPaused) {
+    if (abortController?.signal?.aborted) {
+      const err = new DOMException('aborted', 'AbortError');
+      throw err;
+    }
+    if (progressText) progressText.textContent = t.pausedAfterCurrent;
+    await sleep(350);
+  }
+}
+
+async function setClientPaused(paused) {
+  clientPaused = Boolean(paused);
+  setProcessingControls(isSubmitting);
+  try {
+    if (sessionId) {
+      await fetch(`/api/session/${encodeURIComponent(sessionId)}/${clientPaused ? 'pause' : 'resume'}`, { method: 'POST' });
+    }
+  } catch {}
+  if (progressText) progressText.textContent = clientPaused ? t.pausedAfterCurrent : t.resumed;
+}
+
+async function stopCurrentOnly() {
+  if (!sessionId) return;
+  if (progressText) progressText.textContent = t.currentStopping;
+  try {
+    await fetch(`/api/session/${encodeURIComponent(sessionId)}/stop-current`, { method: 'POST' });
+  } catch {}
+}
+
+function buildPreflightBlockMessage(data, exactEstimate) {
+  const reason = String(data?.reason || '');
+  if (reason === 'not_enough_memory') {
+    return t.notEnoughMemory({
+      required: data.memoryRequiredSize || '?',
+      free: data.memoryFreeSize || '?',
+    });
+  }
+  if (reason === 'too_many_screenshots') {
+    return t.tooManyScreenshots({
+      shots: Number(data.estimatedScreenshots || exactEstimate?.totalShots || 0).toLocaleString(),
+      max: Number(data.maxBatchScreenshots || 0).toLocaleString(),
+    });
+  }
+  if (reason === 'not_enough_disk' || data?.diskEnough === false || data?.canCheck === true) {
+    return t.notEnoughDisk({
+      required: data.requiredSize || '?',
+      free: data.freeSize || '?',
+      estimated: data.estimatedSize || formatBytes(exactEstimate?.totalBytes || 0),
+    });
+  }
+  return data?.message || t.preflightFailed;
+}
+
+pauseBtn?.addEventListener('click', () => setClientPaused(true));
+resumeBtn?.addEventListener('click', () => setClientPaused(false));
+stopCurrentBtn?.addEventListener('click', stopCurrentOnly);
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (isSubmitting) return;
+
+  const files = getSelectedFiles();
+  if (!files.length) return alert(t.select);
+  const submitSettings = getTimeSettings();
+  if (!submitSettings.ok) return alert(submitSettings.message);
+  if (!validateInputs()) return;
+
+  progress.classList.remove('hidden');
+  progressText.textContent = t.preflightChecking;
+  progressBar.style.width = '0%';
+
+  let exactEstimate;
+  try {
+    exactEstimate = await calculateSelectionEstimate(files, submitSettings, {
+      strict: false,
+      onProgress: ({ completed, total }) => {
+        progressText.textContent = t.estimateReading(completed, total);
+        progressBar.style.width = `${Math.round((completed / Math.max(1, total)) * 35)}%`;
+      },
+    });
+  } catch (err) {
+    console.error('Preflight estimate error:', err);
+    alert(t.preflightFailed);
+    progress.classList.add('hidden');
+    return;
+  }
+
+  if (exactEstimate.unread > 0) {
+    progressText.textContent = `${t.estimatePartial(exactEstimate.unread)}\n${t.diskUnknown}`;
+  }
+
+  try {
+    const check = await fetch('/api/preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        estimatedBytes: exactEstimate.totalBytes,
+        estimatedScreenshots: exactEstimate.totalShots,
+        requiredMemoryBytes: exactEstimate.requiredMemoryBytes,
+        selectedSeconds: exactEstimate.selectedSeconds,
+        fileCount: files.length,
+      }),
+    });
+    const disk = await check.json().catch(() => ({}));
+    if (disk && disk.enough === false) {
+      alert(buildPreflightBlockMessage(disk, exactEstimate));
+      progress.classList.add('hidden');
+      return;
+    }
+    if (disk && disk.canCheck === false && estimateInfo) {
+      estimateInfo.textContent = `${estimateInfo.textContent}
+${t.diskUnknown}`;
+    } else {
+      showPreflightPreview(disk, exactEstimate);
+    }
+    cleanupDelayMs = Number(disk?.cleanupMaxAgeMs || 0);
+    outputPreserved = Boolean(disk?.outputPreserved || disk?.outputIsCustom);
+    progressBar.style.width = '40%';
+  } catch (err) {
+    console.error('Preflight disk check error:', err);
+    alert(t.preflightFailed);
+    progress.classList.add('hidden');
+    return;
+  }
+
+  sessionId = createSessionId();
+  localStorage.setItem('uploadSessionId', sessionId);
+  try { eventSource?.close(); } catch {}
+  fileProgressList.innerHTML = '';
+  liveList.classList.add('hidden');
+
+  setBusy(true);
+  progress.classList.remove('hidden');
+  clientPaused = false;
+  setProcessingControls(true);
+  retryBtn.classList.add('hidden');
+  progressText.textContent = t.uploading;
+  progressBar.style.width = '0%';
+  progressBar.style.transition = 'width 0.3s ease';
+  abortController = new AbortController();
+
+  hideMobileDownloadUI();
+
+  const sameFolder = sameFolderSelect?.value === 'true';
+  const requestedOutputFolderName = sameFolder ? getOutputFolderNameForSelection(files) : '';
+
+  const formData = new FormData(form);
+  formData.set('sessionId', sessionId);
+  // ეს ველები ხელით იწერება, რომ ბრაუზერმა/ქეშმა ძველი value არ გააგზავნოს.
+  formData.set('interval', String(submitSettings.interval));
+  formData.set('resolution', 'source');
+  formData.set('sameFolder', sameFolder ? 'true' : 'false');
+  if (requestedOutputFolderName) {
+    formData.set('outputFolderName', requestedOutputFolderName);
+  } else {
+    formData.delete('outputFolderName');
+  }
+
+  // სწორად გავაგზავნოთ დროები
+  const startVal = startTimeInput.value.trim();
+  const endVal = endTimeInput.value.trim();
+
+  if (startVal !== '') {
+    formData.set('startTime', startVal);
+  } else {
+    formData.delete('startTime');
+  }
+
+  if (endVal !== '') {
+    formData.set('endTime', endVal);
+  } else {
+    formData.delete('endTime');
+  }
+
+  // რამდენიმე ვიდეოზე One folder რეჟიმი საერთო ფოლდერს იყენებს.
+  // თუ სახელი ხელით ჩაწერე, ის გახდება საერთო ფოლდერის სახელი; თუ ცარიელია, დარჩება ავტომატური All_... სახელი.
+  let batchId = null;
+  if (sameFolder && files.length > 1) {
+    batchId = requestedOutputFolderName || ('All_' + Math.random().toString(36).substring(2, 8)); // მაგ. All_a1b2c3
+    formData.set('batchId', batchId);
+  } else {
+    formData.delete('batchId');
+  }
+
+  openSSE();
+
+  let allShots = [];
+  let failedFiles = [];
+  let failedFileRecords = [];
+
+  try {
+    for (let i = 0; i < files.length; i++) {
+      await waitIfClientPaused();
+      const file = files[i];
+      const data = new FormData();
+      for (const [k, v] of formData.entries()) {
+        if (k === 'videos' || k === 'folderVideos') continue;
+        data.append(k, v);
+      }
+      // კიდევ ერთხელ ვაფორსებთ მთავარ პარამეტრებს თითო ვიდეოზე.
+      data.set('interval', String(submitSettings.interval));
+      data.set('resolution', 'source');
+      data.set('sameFolder', sameFolderSelect?.value === 'true' ? 'true' : 'false');
+      data.append('video', file);
+      const relPath = fileRelativePath(file);
+      if (relPath) data.set('relativePath', relPath);
+
+      progressText.textContent = `🎬 ${i + 1}/${files.length} - ${fileDisplayName(file)} • ${t.appliedInterval(submitSettings.interval)}`;
+      const percent = Math.round((i / files.length) * 100);
+      progressBar.style.width = `${percent}%`;
+
+      try {
+        // პარამეტრებს ვაგზავნით FormData-შიც და URL query-შიც.
+        // ქართულ/Unicode ფაილის გზას header-ში აღარ ვაგზავნით, რადგან fetch headers Latin-1-ს ითხოვს.
+        const uploadParams = new URLSearchParams();
+        uploadParams.set('interval', String(submitSettings.interval));
+        uploadParams.set('resolution', 'source');
+        uploadParams.set('sameFolder', sameFolder ? 'true' : 'false');
+        uploadParams.set('sessionId', sessionId);
+        if (startVal !== '') uploadParams.set('startTime', startVal);
+        if (endVal !== '') uploadParams.set('endTime', endVal);
+        if (batchId) uploadParams.set('batchId', batchId);
+        if (requestedOutputFolderName) uploadParams.set('outputFolderName', requestedOutputFolderName);
+        const relPath = fileRelativePath(file);
+        if (relPath) uploadParams.set('relativePath', relPath);
+
+        const res = await fetch(`/upload?${uploadParams.toString()}`, {
+          method: 'POST',
+          body: data,
+          signal: abortController.signal,
+          headers: {
+            'x-upload-interval': String(submitSettings.interval),
+            'x-upload-resolution': 'source',
+            'x-upload-same-folder': sameFolder ? 'true' : 'false',
+            'x-upload-session-id': sessionId,
+            ...(startVal !== '' ? { 'x-upload-start-time': startVal } : {}),
+            ...(endVal !== '' ? { 'x-upload-end-time': endVal } : {}),
+            // Unicode folder names are sent through FormData/query, not headers.
+          },
+        });
+
+        if (!res.ok) {
+          let msg = `Server returned ${res.status}`;
+          try {
+            const j = await res.json();
+            if (j && j.error) msg = j.error;
+          } catch {}
+          throw new Error(msg);
+        }
+
+        const json = await res.json();
+        ensureFileRow(json.fileKey, fileDisplayName(file));
+        if (json?.stopped) {
+          updateFileRow(json.fileKey || `local_${i}_${Date.now()}`, {
+            percent: 100,
+            timemark: '',
+            status: 'stopped',
+            filename: fileDisplayName(file),
+          });
+        }
+        if (json && Number(json.appliedInterval) !== Number(submitSettings.interval)) {
+          console.warn('Interval mismatch:', { selected: submitSettings.interval, server: json.appliedInterval, file: file.name });
+        }
+        if (Array.isArray(json.screenshots)) allShots = allShots.concat(json.screenshots);
+      } catch (err) {
+        if (err && err.name === 'AbortError') throw err;
+        console.error('❌ File failed:', fileDisplayName(file), err);
+        failedFiles.push(fileDisplayName(file));
+        failedFileRecords.push(file);
+        const localKey = `local_${i}_${Date.now()}`;
+        updateFileRow(localKey, { percent: 0, timemark: '', status: 'error', filename: fileDisplayName(file) });
+      }
+    }
+
+    progressBar.style.width = '100%';
+    progressText.textContent = failedFiles.length ? t.doneWithFailures(failedFiles.length) : t.done;
+    retryQueue = failedFileRecords.slice();
+    if (failedFiles.length) {
+      retryBtn.textContent = t.retryFailedOnly ? t.retryFailedOnly(failedFiles.length) : t.retryBtn;
+      retryBtn.classList.remove('hidden');
+    }
+    setProcessingControls(false);
+    startCleanupCountdown(cleanupDelayMs);
+
+    localStorage.setItem('screenshots', JSON.stringify(allShots));
+    localStorage.setItem('message', progressText.textContent);
+
+    if (!allShots.length && failedFiles.length) {
+      retryBtn.classList.remove('hidden');
+      return;
+    }
+
+    if (isHandheldLike()) {
+      showMobileDownloadUI();
+      tryAutoZipOnMobile();
+    } else {
+      setTimeout(() => (location.href = `/results.html?sessionId=${encodeURIComponent(sessionId)}`), 500);
+    }
+  } catch (err) {
+    setProcessingControls(false);
+    if (err && err.name === 'AbortError') {
+      progressText.textContent = t.cancel;
+    } else {
+      console.error('❌ Upload Error:', err);
+      progressText.textContent = t.error;
+      retryBtn.classList.remove('hidden');
+    }
+  } finally {
+    setBusy(false);
+  }
+});
+
+retryBtn.onclick = () => {
+  if (retryQueue.length && typeof DataTransfer !== 'undefined') {
+    const dt = new DataTransfer();
+    retryQueue.forEach(file => dt.items.add(file));
+    if (input) input.files = dt.files;
+    if (folderInput) folderInput.value = '';
+    retryQueue = [];
+    retryBtn.classList.add('hidden');
+    updateSelectionInfo();
+    form.requestSubmit();
+    return;
+  }
+  location.reload();
+};
+
+cancelBtn.onclick = async () => {
+  try { abortController?.abort(); } catch {}
+  try { if (sessionId) await fetch(`/api/session/${encodeURIComponent(sessionId)}/cancel`, { method: 'POST' }); } catch {}
+  try { eventSource?.close(); } catch {}
+  progressText.textContent = t.cancel;
+  setProcessingControls(false);
+  setBusy(false);
+};
+
+window.addEventListener('beforeunload', () => {
+  try { eventSource?.close(); } catch {}
+});
+
+window.addEventListener('pageshow', () => {
+  if (!isSubmitting) setBusy(false);
+});
+
+window.addEventListener('unhandledrejection', (event) => {
+  const msg = String(event?.reason?.message || event?.reason || '');
+  if (msg.includes('Could not establish connection. Receiving end does not exist')) {
+    event.preventDefault();
+    return;
+  }
+  console.error('Unhandled promise rejection:', event.reason);
+});
+window.addEventListener('error', (event) => {
+  const msg = String(event?.message || event?.error?.message || event?.error || '');
+  if (msg.includes('Could not establish connection. Receiving end does not exist')) {
+    event.preventDefault();
+    return;
+  }
+  console.error('Frontend error:', event.message || event.error);
+});
+</script>
+</body>
+</html>
