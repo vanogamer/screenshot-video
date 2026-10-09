@@ -120,6 +120,7 @@
 
     <section id="progress" class="night-panel night-progress hidden">
       <p id="progressText" class="night-progress-text"></p>
+      <div id="queueBanner" class="night-info hidden" role="status" style="font-weight:600"></div>
       <div class="night-progress-track">
         <div id="progressBar" class="night-progress-bar" style="width:0%"></div>
       </div>
@@ -344,6 +345,7 @@ Selected capture time: ${selected}`,
     fileError: "❌ Error",
     fileCanceled: "⛔ Canceled",
     fileStopped: "⏭ Stopped",
+    queueBanner: (pos, total, active, max) => `⏳ You are in the queue: #${pos} of ${total}. Currently processing ${active}/${max} videos. Your video will start automatically — keep this page open.`,
     pausedAfterCurrent: "⏸ Paused. Current video can finish; next videos will wait.",
     resumed: "▶ Resumed.",
     currentStopping: "⏭ Stopping current video only...",
@@ -458,6 +460,7 @@ Default output: ${outputPath}
     fileError: "❌ შეცდომა",
     fileCanceled: "⛔ გაუქმდა",
     fileStopped: "⏭ შეჩერდა",
+    queueBanner: (pos, total, active, max) => `⏳ რიგშია: ხარ #${pos} / ${total}. ახლა მუშაობს ${active}/${max} ვიდეო. შენი ვიდეო ავტომატურად დაიწყება — გვერდი არ დახურო.`,
     pausedAfterCurrent: "⏸ პაუზაა. მიმდინარე ვიდეო შეიძლება დასრულდეს; შემდეგი ვიდეოები დაელოდება გაგრძელებას.",
     resumed: "▶ გაგრძელდა.",
     currentStopping: "⏭ ჩერდება მხოლოდ მიმდინარე ვიდეო...",
@@ -1193,7 +1196,7 @@ function queueFileRowUpdate(fileKey, data) {
   }, flushDelay);
 }
 
-function updateFileRow(fileKey, { percent, timemark, status, filename }) {
+function updateFileRow(fileKey, { percent, timemark, status, filename, waitingMessage }) {
   const safeKey = ensureFileRow(fileKey, filename || fileKey);
   const pct = document.getElementById(`pct-${safeKey}`);
   const bar = document.getElementById(`bar-${safeKey}`);
@@ -1204,11 +1207,23 @@ function updateFileRow(fileKey, { percent, timemark, status, filename }) {
   if (bar) bar.style.width = `${pctVal}%`;
   if (meta) {
     let text = timemark ? `${t.timePrefix || '⏱ '}${timemark}` : '';
+    if (status === 'queued') text = waitingMessage || '⏳ …';
     if (status === 'done') text = t.fileDone;
     if (status === 'error') text = t.fileError;
     if (status === 'canceled') text = t.fileCanceled;
     if (status === 'stopped') text = t.fileStopped;
     meta.textContent = text || '—';
+  }
+}
+
+const queueBannerEl = document.getElementById('queueBanner');
+function showQueueBanner(d) {
+  if (!queueBannerEl) return;
+  if (d && d.status === 'queued' && d.queuePosition) {
+    queueBannerEl.textContent = t.queueBanner(d.queuePosition, d.queueTotal || d.queuePosition, d.activeJobs ?? 0, d.maxActiveJobs ?? 0);
+    queueBannerEl.classList.remove('hidden');
+  } else {
+    queueBannerEl.classList.add('hidden');
   }
 }
 
@@ -1222,17 +1237,22 @@ function openSSE() {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
 
+    if (msg.type === 'queued') showQueueBanner(msg);
+    else if (msg.type === 'start' || msg.type === 'progress' || msg.type === 'done' || msg.type === 'error' || msg.type === 'canceled' || msg.type === 'stopped') showQueueBanner(null);
+
     if (msg.type === 'snapshot' && msg.files) {
+      showQueueBanner(Object.values(msg.files).find(f => f && f.status === 'queued') || null);
       for (const [fk, data] of Object.entries(msg.files)) {
         queueFileRowUpdate(fk, { ...data, filename: data.filename || fk });
       }
     } else if (msg.type === 'start') {
       queueFileRowUpdate(msg.fileKey, { ...msg.file, filename: msg.file?.filename || msg.fileKey });
-    } else if (msg.type === 'progress' || msg.type === 'done' || msg.type === 'end' || msg.type === 'error' || msg.type === 'stopped' || msg.type === 'canceled') {
+    } else if (msg.type === 'queued' || msg.type === 'progress' || msg.type === 'done' || msg.type === 'end' || msg.type === 'error' || msg.type === 'stopped' || msg.type === 'canceled') {
       queueFileRowUpdate(msg.fileKey, {
         percent: msg.percent,
         timemark: msg.timemark,
         status: msg.status,
+        waitingMessage: msg.waitingMessage,
         filename: msg.filename || msg.fileKey
       });
     }
