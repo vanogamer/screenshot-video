@@ -630,8 +630,9 @@ function takeForcedFileStop(sessionId, fileKey) {
   return info;
 }
 
-async function checkDiskDuringProcessing(sessionId, fileKey, estimatedRemainingBytes = 0, outputRoot = null) {
-  const disk = await checkOutputDiskSpace(estimatedRemainingBytes, outputRoot || getSessionOutputRoot(sessionId));
+async function checkDiskDuringProcessing(sessionId, fileKey, estimatedRemainingBytes = 0, outputRoot = null, jobId = null) {
+  const root = outputRoot || getSessionOutputRoot(sessionId);
+  const disk = await checkOutputDiskSpace(Number(estimatedRemainingBytes || 0) + reservedDiskBytes(root, jobId), root);
   if (disk.canCheck && !disk.enough) {
     return {
       ok: false,
@@ -883,30 +884,199 @@ app.get('/screenshots/:sessionId/:folderName/:fileName', async (req, res) => {
 app.use('/screenshots', (req, res, next) => express.static(outputDir)(req, res, next));
 app.use('/output', express.static(path.join(__dirname, 'output')));
 
-// ===== Job Queue =====
-const MAX_ACTIVE_JOBS = Number(process.env.MAX_ACTIVE_JOBS || 1);
-let activeJobs = 0;
-const jobQueue = [];
+// ===== Resource-aware Job Scheduler =====
+// ერთდროულად რამდენიმე სამუშაო (მაგ. ტელეფონი + PC) მუშაობს, სანამ დისკი/RAM ყველასთვის ჰყოფნის.
+// თუ არ ჰყოფნის, ახალი სამუშაო რიგში ელოდება და ავტომატურად იწყება, როცა წინა დასრულდება
+// და მისი დაჯავშნილი ადგილი/RAM გათავისუფლდება.
+const CPU_COUNT = Math.max(1, os.cpus()?.length || 1);
+// ნაგულისხმევი: CPU-ს ნახევარი (მინ. 2, მაქს. 6). ზღვარს მაინც დისკი/RAM ადგენს; რიგში შეიძლება ბევრი მოწყობილობა იდგეს.
+const MAX_ACTIVE_JOBS = Math.max(1, Number(process.env.MAX_ACTIVE_JOBS || Math.min(6, Math.max(2, Math.floor(CPU_COUNT / 2)))));
+// CPU თანაბრად ნაწილდება აქტიურ სამუშაოებზე, რომ ერთმა ვიდეომ მეორე არ დაახრჩოს.
+const FFMPEG_THREADS_PER_JOB = Math.max(1, Number(process.env.FFMPEG_THREADS_PER_JOB || Math.ceil(CPU_COUNT / MAX_ACTIVE_JOBS)));
+// ახლადგაშვებული ffmpeg-ის RAM ჯერ არ ჩანს os.freemem()-ში, ამიტომ პირველ წამებში ვჯავშნით.
+const RAM_WARMUP_MS = Math.max(0, Number(process.env.RAM_WARMUP_MS || 20000));
+const SCHEDULER_RECHECK_MS = Math.max(1000, Number(process.env.SCHEDULER_RECHECK_MS || 2000));
 
-function acquireJobSlot() {
-  return new Promise(resolve => {
-    if (activeJobs < MAX_ACTIVE_JOBS) {
-      activeJobs++;
-      resolve();
-      return;
+const activeJobMap = new Map(); // id -> { sessionId, fileKey, outputRoot, remainingDiskBytes, memoryBytes, startedAt }
+const jobQueue = [];            // FIFO: { id, sessionId, fileKey, estimatedBytes, estimatedScreenshots, memoryBytes, outputRoot, resolve, reject, lastNote }
+let jobSeq = 0;
+
+function reservedDiskBytes(root, excludeId = null) {
+  const base = path.resolve(root || outputDir);
+  let sum = 0;
+  for (const [id, j] of activeJobMap) {
+    if (id === excludeId) continue;
+    if (path.resolve(j.outputRoot) === base) sum += Math.max(0, j.remainingDiskBytes || 0);
+  }
+  return sum;
+}
+
+function reservedMemoryBytes() {
+  const now = Date.now();
+  let sum = 0;
+  for (const j of activeJobMap.values()) {
+    if (now - j.startedAt < RAM_WARMUP_MS) sum += j.memoryBytes || 0;
+  }
+  return sum;
+}
+
+function updateJobRemaining(jobId, remainingBytes) {
+  const j = jobId ? activeJobMap.get(jobId) : null;
+  if (j) j.remainingDiskBytes = Math.max(0, Number(remainingBytes) || 0);
+}
+
+async function evaluateJobAdmission(job) {
+  const noOneToWaitFor = activeJobMap.size === 0;
+
+  if (activeJobMap.size >= MAX_ACTIVE_JOBS) {
+    return { ok: false, impossible: false, message: `⏳ რიგშია — ელოდება თავისუფალ სლოტს (მუშაობს ${activeJobMap.size}/${MAX_ACTIVE_JOBS}).` };
+  }
+
+  // იგივე ფორმულა, რასაც მუშაობისას disk guard იყენებს: (ახალი + სხვების დარჩენილი) × safety + რეზერვი.
+  // ასე ვიდეო, რომელსაც guard მერე გააჩერებდა, საერთოდ არ დაიწყება და რიგში დადგება.
+  const reservedOthers = reservedDiskBytes(job.outputRoot);
+  const requiredDisk = Math.ceil((job.estimatedBytes + reservedOthers) * DISK_SPACE_SAFETY_MULTIPLIER) + MIN_FREE_SPACE_AFTER_JOB;
+  const disk = await getFreeDiskInfo(job.outputRoot);
+  if (disk.ok && disk.freeBytes < requiredDisk) {
+    return {
+      ok: false,
+      impossible: noOneToWaitFor,
+      message: `⏳ რიგშია — დისკის ადგილს ელოდება (საჭიროა ~${formatBytesServer(requiredDisk)} ორივე სამუშაოსთვის, თავისუფალია ~${formatBytesServer(disk.freeBytes)}).`,
+    };
+  }
+
+  const availableMem = (Number(os.freemem()) || 0) - reservedMemoryBytes();
+  if (availableMem < job.memoryBytes) {
+    return {
+      ok: false,
+      impossible: noOneToWaitFor,
+      message: `⏳ რიგშია — RAM-ს ელოდება (საჭიროა ~${formatBytesServer(job.memoryBytes)}, თავისუფალია ~${formatBytesServer(Math.max(0, availableMem))}).`,
+    };
+  }
+
+  return { ok: true };
+}
+
+function noteQueuedJob(job, position, message) {
+  const note = `${position}|${jobQueue.length}|${activeJobMap.size}|${message}`;
+  if (job.lastNote === note) return;
+  job.lastNote = note;
+  const st = progressState.get(job.sessionId);
+  const f = st?.files?.[job.fileKey];
+  if (!f) return;
+  f.status = 'queued';
+  f.queuePosition = position;
+  f.queueTotal = jobQueue.length;
+  f.activeJobs = activeJobMap.size;
+  f.maxActiveJobs = MAX_ACTIVE_JOBS;
+  f.waitingMessage = position > 1
+    ? `⏳ რიგშია (#${position} / ${jobQueue.length}) — წინა ვიდეოებს ელოდება.`
+    : `${message} (#1 / ${jobQueue.length})`;
+  st.updatedAt = Date.now();
+  broadcast(job.sessionId, { type: 'queued', fileKey: job.fileKey, ...f });
+}
+
+function rejectQueuedJob(index, err) {
+  const [job] = jobQueue.splice(index, 1);
+  job?.reject(err);
+}
+
+async function runJobScheduler() {
+  // 1) გაუქმებული / შეჩერებული რიგში მდგომი სამუშაოები გავწმინდოთ
+  for (let i = jobQueue.length - 1; i >= 0; i--) {
+    const job = jobQueue[i];
+    if (canceledSessions.has(job.sessionId)) {
+      rejectQueuedJob(i, createHttpError(499, 'დამუშავება შეწყდა.', { reason: 'canceled_while_queued' }));
+    } else if (stopCurrentRequests.has(job.sessionId)) {
+      stopCurrentRequests.delete(job.sessionId);
+      rememberForcedFileStop(job.sessionId, job.fileKey, 'stopped_current', 'მიმდინარე ვიდეო შეჩერდა. Batch გაგრძელდება შემდეგ ვიდეოზე.');
+      rejectQueuedJob(i, createHttpError(409, 'მიმდინარე ვიდეო შეჩერდა.', { reason: 'stopped_current' }));
     }
-    jobQueue.push(resolve);
+  }
+
+  // 2) FIFO: თავში მდგომს ვამოწმებთ; ვინც ჯერ არ ეტევა, ის ელოდება (ასე დიდი ვიდეო არასდროს "შიმშილობს")
+  while (jobQueue.length) {
+    const job = jobQueue[0];
+    const verdict = await evaluateJobAdmission(job);
+
+    if (verdict.ok) {
+      jobQueue.shift();
+      activeJobMap.set(job.id, {
+        sessionId: job.sessionId,
+        fileKey: job.fileKey,
+        outputRoot: job.outputRoot,
+        remainingDiskBytes: job.estimatedBytes,
+        memoryBytes: job.memoryBytes,
+        startedAt: Date.now(),
+      });
+      job.resolve({ id: job.id, threads: FFMPEG_THREADS_PER_JOB });
+      continue;
+    }
+
+    if (verdict.impossible) {
+      // არავინ არ მუშაობს და მაინც არ ეტევა → ლოდინს აზრი არ აქვს, ნამდვილი 507
+      const cap = await checkRuntimeCapacity({
+        estimatedBytes: job.estimatedBytes,
+        estimatedScreenshots: job.estimatedScreenshots,
+        outputRoot: job.outputRoot,
+        requiredMemoryBytes: job.memoryBytes,
+      });
+      jobQueue.shift();
+      if (cap.enough) {
+        activeJobMap.set(job.id, { sessionId: job.sessionId, fileKey: job.fileKey, outputRoot: job.outputRoot, remainingDiskBytes: job.estimatedBytes, memoryBytes: job.memoryBytes, startedAt: Date.now() });
+        job.resolve({ id: job.id, threads: FFMPEG_THREADS_PER_JOB });
+      } else {
+        job.reject(capacityError(507, cap));
+      }
+      continue;
+    }
+
+    noteQueuedJob(job, 1, verdict.message);
+    break;
+  }
+
+  for (let i = 1; i < jobQueue.length; i++) noteQueuedJob(jobQueue[i], i + 1, '');
+}
+
+let schedulerRunning = false;
+let schedulerAgain = false;
+async function pumpJobScheduler() {
+  if (schedulerRunning) { schedulerAgain = true; return; }
+  schedulerRunning = true;
+  try {
+    do {
+      schedulerAgain = false;
+      await runJobScheduler();
+    } while (schedulerAgain);
+  } catch (e) {
+    console.error('Scheduler error:', e);
+  } finally {
+    schedulerRunning = false;
+  }
+}
+
+function acquireJobSlot({ sessionId, fileKey, estimatedBytes, estimatedScreenshots, memoryBytes, outputRoot }) {
+  return new Promise((resolve, reject) => {
+    jobQueue.push({
+      id: `job_${++jobSeq}`,
+      sessionId, fileKey,
+      estimatedBytes: Math.max(0, Number(estimatedBytes) || 0),
+      estimatedScreenshots: Number(estimatedScreenshots) || 0,
+      memoryBytes: Math.max(0, Number(memoryBytes) || MIN_FREE_RAM_BEFORE_JOB),
+      outputRoot: outputRoot || outputDir,
+      resolve, reject,
+      lastNote: null,
+    });
+    pumpJobScheduler();
   });
 }
 
-function releaseJobSlot() {
-  activeJobs = Math.max(0, activeJobs - 1);
-  const next = jobQueue.shift();
-  if (next) {
-    activeJobs++;
-    next();
-  }
+function releaseJobSlot(jobId) {
+  if (jobId && activeJobMap.delete(jobId)) pumpJobScheduler();
 }
+
+// დისკი/RAM შეიძლება შეიცვალოს გარედან, ამიტომ რიგს პერიოდულადაც ვამოწმებთ
+setInterval(() => { if (jobQueue.length) pumpJobScheduler(); }, SCHEDULER_RECHECK_MS);
 
 // ===== State Management =====
 const sseClients = new Map();
@@ -1084,7 +1254,8 @@ app.get('/api/health', async (_, res) => {
   const disk = await getFreeDiskInfo(outputDir);
   res.json({
     ok: true,
-    activeJobs,
+    activeJobs: activeJobMap.size,
+    maxActiveJobs: MAX_ACTIVE_JOBS,
     queuedJobs: jobQueue.length,
     uptime: Math.round(process.uptime()),
     maxScreenshotsPerVideo: MAX_SCREENSHOTS_PER_VIDEO,
@@ -1117,11 +1288,20 @@ app.post('/api/preflight', async (req, res) => {
     const disk = capacity.disk;
     const memory = capacity.memory;
 
-    res.status(capacity.enough ? 200 : 507).json({
+    // სხვა სამუშაო ახლა RAM-ს/დისკს ამუშავებს? მაშინ ეს ვიდეო არ უნდა დაიბლოკოს — რიგში დადგება.
+    const busy = activeJobMap.size > 0 || jobQueue.length > 0;
+    const memoryOnlyBlocked = capacity.batchWithinLimit && disk.enough && !memory.enough && memory.totalBytes >= memory.requiredBytes;
+    const diskReservedByOthers = busy && disk.canCheck && (disk.freeBytes - reservedDiskBytes(outputInfo.path)) < disk.requiredBytes;
+    const willQueue = busy && capacity.batchWithinLimit && (memoryOnlyBlocked || diskReservedByOthers);
+    const enough = capacity.enough || (busy && memoryOnlyBlocked);
+
+    res.status(enough ? 200 : 507).json({
       ok: true,
-      enough: capacity.enough,
-      reason: capacity.reason,
-      message: capacity.message,
+      enough,
+      willQueue,
+      queueMessage: willQueue ? 'ახლა სხვა სამუშაო მიმდინარეობს და რესურსი ორივესთვის ერთდროულად არ ჰყოფნის. ეს ვიდეო რიგში დადგება და ავტომატურად დაიწყება, როცა ადგილი/RAM გათავისუფლდება.' : null,
+      reason: enough ? null : capacity.reason,
+      message: enough ? null : capacity.message,
       canCheck: disk.canCheck,
       diskEnough: disk.enough,
       memoryEnough: memory.enough,
@@ -1433,6 +1613,8 @@ app.get('/download/:sessionId.zip', async (req, res) => {
 // ===== Upload Endpoint (მთავარი ცვლილება) =====
 app.post('/upload', async (req, res) => {
   let slotAcquired = false;
+  let jobSlotId = null;
+  let ffThreads = FFMPEG_THREADS_PER_JOB;
   let command = null;
   let sessionId = null;
   let videoPath = null;
@@ -1615,8 +1797,10 @@ app.post('/upload', async (req, res) => {
     const outputDims = selectedResolutionSizeServer(metadata, resolution);
     const requiredMemoryBytes = estimateProcessingMemoryBytes(outputDims.width, outputDims.height);
     const estimatedImageBytes = totalShots * estimatePngBytesServer(outputDims.width, outputDims.height);
-    let capacityCheck = await checkRuntimeCapacity({ estimatedBytes: estimatedImageBytes, estimatedScreenshots: totalShots, outputRoot, requiredMemoryBytes });
-    if (!capacityCheck.enough) {
+    const capacityCheck = await checkRuntimeCapacity({ estimatedBytes: estimatedImageBytes, estimatedScreenshots: totalShots, outputRoot, requiredMemoryBytes });
+    // აქ მხოლოდ მკაცრი ლიმიტი ბლოკავს. დისკს/RAM-ს scheduler ამოწმებს სხვა მიმდინარე სამუშაოების დაჯავშნით,
+    // და საჭიროების შემთხვევაში ვიდეოს რიგში აყენებს (იხ. acquireJobSlot).
+    if (!capacityCheck.batchWithinLimit) {
       await cleanupUploadFiles(video, videoPath);
       throw capacityError(507, capacityCheck);
     }
@@ -1667,20 +1851,26 @@ app.post('/upload', async (req, res) => {
       rememberForcedFileStop(sessionId, fileKey, 'stopped_current', 'მიმდინარე ვიდეო შეჩერდა. Batch გაგრძელდება შემდეგ ვიდეოზე.');
       throw createHttpError(409, 'მიმდინარე ვიდეო შეჩერდა.', { reason: 'stopped_current' });
     }
-    await acquireJobSlot();
+    const slot = await acquireJobSlot({
+      sessionId, fileKey,
+      estimatedBytes: estimatedImageBytes,
+      estimatedScreenshots: totalShots,
+      memoryBytes: requiredMemoryBytes,
+      outputRoot,
+    });
+    jobSlotId = slot.id;
+    ffThreads = slot.threads;
     slotAcquired = true;
 
     if (canceledSessions.has(sessionId)) {
       throw createHttpError(499, 'დამუშავება შეწყდა.', { reason: 'canceled_while_queued' });
     }
 
-    capacityCheck = await checkRuntimeCapacity({ estimatedBytes: estimatedImageBytes, estimatedScreenshots: totalShots, outputRoot, requiredMemoryBytes });
-    if (!capacityCheck.enough) {
-      throw capacityError(507, capacityCheck);
-    }
-
     const stAfterSlot = progressState.get(sessionId);
     if (stAfterSlot?.files?.[fileKey]) {
+      delete stAfterSlot.files[fileKey].waitingMessage;
+      delete stAfterSlot.files[fileKey].queuePosition;
+      delete stAfterSlot.files[fileKey].queueTotal;
       stAfterSlot.files[fileKey].status = 'processing';
       stAfterSlot.updatedAt = Date.now();
       broadcast(sessionId, { type: 'start', file: stAfterSlot.files[fileKey], fileKey });
@@ -1709,7 +1899,7 @@ app.post('/upload', async (req, res) => {
 
         if (i === 0 || i % 10 === 0) {
           const remainingBytes = Math.max(estimatePngBytesServer(outputDims.width, outputDims.height), (total - i) * estimatePngBytesServer(outputDims.width, outputDims.height));
-          const diskGuard = await checkDiskDuringProcessing(sessionId, fileKey, remainingBytes, outputRoot);
+          const diskGuard = await checkDiskDuringProcessing(sessionId, fileKey, remainingBytes, outputRoot, jobSlotId);
           if (!diskGuard.ok) {
             rememberForcedFileStop(sessionId, fileKey, diskGuard.reason, diskGuard.message, { disk: diskGuard.disk });
             throw createHttpError(507, diskGuard.message, { reason: diskGuard.reason, disk: diskGuard.disk });
@@ -1717,11 +1907,13 @@ app.post('/upload', async (req, res) => {
         }
 
         const t = times[i];
+        updateJobRemaining(jobSlotId, (total - i) * estimatePngBytesServer(outputDims.width, outputDims.height));
         const outFile = path.join(outputFolder, `${captureBase}_${String(i + 1).padStart(5, '0')}${SCREENSHOT_EXT}`);
 
         await new Promise((resolve, reject) => {
           command = ffmpeg(videoPath)
             .seekInput(t)
+            .inputOptions(['-threads', String(ffThreads)])
             .outputOptions(makeSparseOutputOptions(scaleFilter))
             .output(outFile);
 
@@ -1770,7 +1962,7 @@ app.post('/upload', async (req, res) => {
       }
 
       if (slotAcquired) {
-        releaseJobSlot();
+        releaseJobSlot(jobSlotId);
         slotAcquired = false;
       }
 
@@ -1798,6 +1990,7 @@ app.post('/upload', async (req, res) => {
 
       command = ffmpeg(videoPath)
         .seekInput(safeStartTime)
+        .inputOptions(['-threads', String(ffThreads)])
         .outputOptions(ffmpegOutputOptions)
         .output(outputPattern);
 
@@ -1812,13 +2005,15 @@ app.post('/upload', async (req, res) => {
             const current = Math.min(parseTimemark(p.timemark || '0:00:00.00'), progressDuration);
             const percent = Math.max(0, Math.min(100, (current / progressDuration) * 100));
 
+            updateJobRemaining(jobSlotId, Math.ceil(estimatedImageBytes * Math.max(0, 1 - (percent / 100))));
+
             const now = Date.now();
             if (!diskGuardInFlight && now - lastDiskGuardAt >= LOW_DISK_CHECK_INTERVAL_MS) {
               lastDiskGuardAt = now;
               diskGuardInFlight = true;
               const remainingRatio = Math.max(0.05, 1 - (percent / 100));
               const remainingBytes = Math.ceil(estimatedImageBytes * remainingRatio);
-              checkDiskDuringProcessing(sessionId, fileKey, remainingBytes, outputRoot)
+              checkDiskDuringProcessing(sessionId, fileKey, remainingBytes, outputRoot, jobSlotId)
                 .then(guard => {
                   if (!guard.ok) {
                     rememberForcedFileStop(sessionId, fileKey, guard.reason, guard.message, { disk: guard.disk });
@@ -1855,7 +2050,7 @@ app.post('/upload', async (req, res) => {
             }
 
             if (slotAcquired) {
-              releaseJobSlot();
+              releaseJobSlot(jobSlotId);
               slotAcquired = false;
             }
             reject(err);
@@ -1877,7 +2072,7 @@ app.post('/upload', async (req, res) => {
             console.log(`✅ დასრულდა სქრინშოტების გენერაცია: ${displayBase} (${sessionId})`);
 
             if (slotAcquired) {
-              releaseJobSlot();
+              releaseJobSlot(jobSlotId);
               slotAcquired = false;
             }
             resolve();
@@ -1939,7 +2134,7 @@ app.post('/upload', async (req, res) => {
     }
 
     if (command) untrackFfmpeg(sessionId, command, fileKey);
-    if (slotAcquired) releaseJobSlot();
+    if (slotAcquired) releaseJobSlot(jobSlotId);
 
     let partialOutput = null;
     try {
